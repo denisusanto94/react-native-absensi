@@ -33,6 +33,9 @@ const resolveLoginUserPayload = (payload: LoginResponse): LoginUserPayload => {
   if (payload.data?.user) {
     return payload.data.user;
   }
+  if (payload.user) {
+    return payload.user;
+  }
   if (payload.data) {
     const { token: _token, access_token: _accessToken, user: _nestedUser, ...rest } = payload.data;
     return rest;
@@ -99,12 +102,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = useCallback(
     async ({ email, password }: { email: string; password: string }) => {
       const result = await api.loginUser(email, password);
-      const tokenFromResponse = resolveLoginToken(result);
-      const normalizedToken = tokenFromResponse?.toString();
+      let normalizedToken = resolveLoginToken(result)?.toString();
+      let userPayload = resolveLoginUserPayload(result);
+
+      if (!normalizedToken) {
+        try {
+          const fallback = await api.login(email, password);
+          normalizedToken = resolveLoginToken(fallback)?.toString() ?? null;
+          if (!userPayload.email) {
+            userPayload = resolveLoginUserPayload(fallback);
+          }
+        } catch (error) {
+          console.warn('Fallback login failed', error);
+        }
+      }
+
       if (!normalizedToken) {
         throw new Error('Token tidak tersedia pada respons login.');
       }
-      const mappedUser = mapLoginResponse(resolveLoginUserPayload(result));
+
+      const mappedUser = mapLoginResponse(userPayload);
       setUser(mappedUser);
       setToken(normalizedToken);
       await persist(mappedUser, normalizedToken);

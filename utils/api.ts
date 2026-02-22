@@ -48,6 +48,7 @@ export type LoginUserPayload = {
 export type LoginResponse = LoginUserPayload & {
   token?: string | null;
   access_token?: string | null;
+  user?: LoginUserPayload | null;
   data?:
     | (LoginUserPayload & {
         token?: string | null;
@@ -92,6 +93,14 @@ const authHeaders = (token?: string) =>
 export const api = {
   loginUser: (email: string, password: string) =>
     request<LoginResponse>("/auth/login_user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    }),
+  login: (email: string, password: string) =>
+    request<LoginResponse>("/auth/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

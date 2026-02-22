@@ -19,9 +19,9 @@ export type CheckPayload = {
 const mapOffice = (office: OfficeResponse): Office => ({
   id: office.id,
   name: office.office_name,
-  latitude: office.latitude,
-  longitude: office.longitude,
-  radius: office.radius_meter,
+  latitude: Number(office.latitude),
+  longitude: Number(office.longitude),
+  radius: Number(office.radius_meter),
   address: office.address,
 });
 
