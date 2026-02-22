@@ -83,6 +83,28 @@ export type CoordinatesPayload = {
   longitude: number;
 };
 
+export type LeaveRecord = {
+  id: number;
+  user_id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  status: string;
+  approved_by: number | null;
+  created_at: string;
+  user_name?: string | null;
+  approved_by_name?: string | null;
+};
+
+export type LeaveRequestPayload = {
+  user_id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+};
+
 const authHeaders = (token?: string) =>
   token
     ? {
@@ -134,6 +156,22 @@ export const api = {
     }),
   submitAttendance: (token: string, payload: SubmitAttendancePayload) =>
     request<{ message?: string }>("/attendance/submit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeaders(token) ?? {}),
+      },
+      body: JSON.stringify(payload),
+    }),
+  getLeaves: (token: string) =>
+    request<LeaveRecord[]>("/leaves", {
+      method: "GET",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
+    }),
+  createLeave: (token: string, payload: LeaveRequestPayload) =>
+    request<{ message?: string }>("/leaves", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

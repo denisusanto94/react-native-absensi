@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -10,6 +11,8 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
+import * as MediaLibrary from "expo-media-library";
+import Constants from "expo-constants";
 
 import { UI_COLORS } from "@/constants/attendance";
 
@@ -18,6 +21,12 @@ type Props = {
   mode: "check-in" | "check-out";
   onCaptured: (uri: string) => void;
   onDismiss: () => void;
+  watermark?: {
+    latitude: number;
+    longitude: number;
+    timestamp: Date;
+    label?: string | null;
+  } | null;
 };
 
 export const SelfieCaptureSheet = ({
@@ -25,8 +34,11 @@ export const SelfieCaptureSheet = ({
   mode,
   onCaptured,
   onDismiss,
+  watermark,
 }: Props) => {
   const [permission, requestPermission] = useCameraPermissions();
+  const isExpoGo = Constants.appOwnership === "expo";
+  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
   const cameraRef = useRef<CameraView | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -38,10 +50,20 @@ export const SelfieCaptureSheet = ({
       return;
     }
 
-    if (visible && !permission?.granted) {
+    if (!permission?.granted) {
       requestPermission();
     }
-  }, [permission?.granted, requestPermission, visible]);
+    if (!isExpoGo && !mediaPermission?.granted) {
+      requestMediaPermission();
+    }
+  }, [
+    isExpoGo,
+    mediaPermission?.granted,
+    permission?.granted,
+    requestMediaPermission,
+    requestPermission,
+    visible,
+  ]);
 
   const takeSelfie = useCallback(async () => {
     if (!cameraRef.current) {
@@ -63,12 +85,32 @@ export const SelfieCaptureSheet = ({
     }
   }, []);
 
-  const handleUseSelfie = useCallback(() => {
-    if (previewUri) {
-      onCaptured(previewUri);
-      setPreviewUri(null);
+  const handleUseSelfie = useCallback(async () => {
+    if (!previewUri) {
+      return;
     }
-  }, [onCaptured, previewUri]);
+    if (!isExpoGo) {
+      try {
+        if (!mediaPermission?.granted) {
+          const status = await requestMediaPermission();
+          if (!status?.granted) {
+            Alert.alert(
+              "Izin penyimpanan",
+              "Tidak dapat menyimpan foto tanpa izin akses media. Foto tetap digunakan untuk absensi."
+            );
+          } else {
+            await MediaLibrary.saveToLibraryAsync(previewUri);
+          }
+        } else {
+          await MediaLibrary.saveToLibraryAsync(previewUri);
+        }
+      } catch (error) {
+        console.warn("Gagal menyimpan selfie", error);
+      }
+    }
+    onCaptured(previewUri);
+    setPreviewUri(null);
+  }, [isExpoGo, mediaPermission?.granted, onCaptured, previewUri, requestMediaPermission]);
 
   const headerText = useMemo(
     () =>
@@ -77,6 +119,38 @@ export const SelfieCaptureSheet = ({
         : "Ambil selfie untuk check-out",
     [mode]
   );
+
+  const watermarkInfo = useMemo(() => {
+    if (!watermark) {
+      return null;
+    }
+    const date = watermark.timestamp;
+    const dateText = date.toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const timeText = date.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    return {
+      location: watermark.label ?? "Lokasi terdeteksi",
+      coords: `Lat ${watermark.latitude.toFixed(5)}, Lon ${watermark.longitude.toFixed(5)}`,
+      timestamp: `${dateText} ${timeText}`,
+    };
+  }, [watermark]);
+
+  const renderWatermark = () =>
+    watermarkInfo ? (
+      <View style={styles.watermark}>
+        <Text style={styles.watermarkText}>{watermarkInfo.location}</Text>
+        <Text style={styles.watermarkText}>{watermarkInfo.coords}</Text>
+        <Text style={styles.watermarkText}>{watermarkInfo.timestamp}</Text>
+      </View>
+    ) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
@@ -101,6 +175,7 @@ export const SelfieCaptureSheet = ({
         ) : previewUri ? (
           <View style={styles.previewWrapper}>
             <Image source={{ uri: previewUri }} style={styles.previewImage} />
+            {renderWatermark()}
           </View>
         ) : (
           <View style={styles.cameraWrapper}>
@@ -115,6 +190,7 @@ export const SelfieCaptureSheet = ({
             <View style={styles.cameraOverlay}>
               <Text style={styles.overlayText}>Posisikan wajahmu di tengah layar</Text>
             </View>
+            {renderWatermark()}
           </View>
         )}
 
@@ -201,7 +277,7 @@ const styles = StyleSheet.create({
   },
   cameraOverlay: {
     position: "absolute",
-    bottom: 24,
+    top: 24,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -264,5 +340,20 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  watermark: {
+    position: "absolute",
+    right: 16,
+    bottom: 16,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: "flex-end",
+  },
+  watermarkText: {
+    color: "#fff",
+    fontSize: 11,
+    lineHeight: 14,
   },
 });

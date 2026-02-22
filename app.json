@@ -39,6 +39,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Izinkan absensiApp mengakses foto untuk menampilkan bukti selfie.",
+          "savePhotosPermission": "Izinkan absensiApp menyimpan foto selfie ke galeri perangkat.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "experiments": {
