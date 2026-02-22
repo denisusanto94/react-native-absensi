@@ -13,6 +13,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import * as MediaLibrary from "expo-media-library";
 import Constants from "expo-constants";
+import { captureRef } from "react-native-view-shot";
 
 import { UI_COLORS } from "@/constants/attendance";
 
@@ -41,6 +42,7 @@ export const SelfieCaptureSheet = ({
   const [mediaPermission, setMediaPermission] =
     useState<MediaLibrary.PermissionResponse | null>(null);
   const cameraRef = useRef<CameraView | null>(null);
+  const previewRef = useRef<View | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
 
@@ -86,6 +88,21 @@ export const SelfieCaptureSheet = ({
     if (!previewUri) {
       return;
     }
+    let finalUri = previewUri;
+    if (previewRef.current) {
+      try {
+        const captured = await captureRef(previewRef, {
+          format: "jpg",
+          quality: 0.9,
+          result: "tmpfile",
+        });
+        if (captured) {
+          finalUri = captured;
+        }
+      } catch (error) {
+        console.warn("Gagal membuat watermark pada selfie", error);
+      }
+    }
     if (!isExpoGo) {
       try {
         let status = mediaPermission;
@@ -93,8 +110,8 @@ export const SelfieCaptureSheet = ({
           status = await MediaLibrary.requestPermissionsAsync();
           setMediaPermission(status);
         }
-        if (status.status === "granted") {
-          await MediaLibrary.saveToLibraryAsync(previewUri);
+        if (status?.status === "granted") {
+          await MediaLibrary.saveToLibraryAsync(finalUri);
         } else {
           Alert.alert(
             "Izin penyimpanan",
@@ -105,9 +122,9 @@ export const SelfieCaptureSheet = ({
         console.warn("Gagal menyimpan selfie", error);
       }
     }
-    onCaptured(previewUri);
+    onCaptured(finalUri);
     setPreviewUri(null);
-  }, [isExpoGo, mediaPermission, onCaptured, previewUri]);
+  }, [mediaPermission, isExpoGo, onCaptured, previewUri]);
 
   const headerText = useMemo(
     () =>
@@ -170,7 +187,7 @@ export const SelfieCaptureSheet = ({
             </Pressable>
           </View>
         ) : previewUri ? (
-          <View style={styles.previewWrapper}>
+          <View ref={previewRef} style={styles.previewWrapper} collapsable={false}>
             <Image source={{ uri: previewUri }} style={styles.previewImage} />
             {renderWatermark()}
           </View>
