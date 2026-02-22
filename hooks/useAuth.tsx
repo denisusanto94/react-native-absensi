@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { api, type LoginResponse } from '@/utils/api';
+import { api, type LoginResponse, type LoginUserPayload } from '@/utils/api';
 
 export type AuthUser = {
   id: number;
@@ -22,12 +22,39 @@ const AUTH_STORAGE_KEY = '@absensi/auth';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const mapLoginResponse = (payload: LoginResponse) => ({
-  id: payload.id_user,
-  email: payload.email,
-  roles: payload.roles,
-  division: payload.divisi,
-});
+const resolveLoginToken = (payload: LoginResponse) =>
+  payload.token ??
+  payload.access_token ??
+  payload.data?.token ??
+  payload.data?.access_token ??
+  null;
+
+const resolveLoginUserPayload = (payload: LoginResponse): LoginUserPayload => {
+  if (payload.data?.user) {
+    return payload.data.user;
+  }
+  if (payload.data) {
+    const { token: _token, access_token: _accessToken, user: _nestedUser, ...rest } = payload.data;
+    return rest;
+  }
+  return payload;
+};
+
+const mapLoginResponse = (payload: LoginUserPayload): AuthUser => {
+  const id = payload.id_user ?? payload.id;
+  const email = payload.email;
+
+  if (!id || !email) {
+    throw new Error('Data pengguna tidak lengkap pada respons login.');
+  }
+
+  return {
+    id,
+    email,
+    roles: payload.roles ?? payload.role ?? '-',
+    division: payload.divisi ?? payload.division ?? '-',
+  };
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -72,13 +99,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = useCallback(
     async ({ email, password }: { email: string; password: string }) => {
       const result = await api.loginUser(email, password);
-      if (!result.token) {
+      const tokenFromResponse = resolveLoginToken(result);
+      const normalizedToken = tokenFromResponse?.toString();
+      if (!normalizedToken) {
         throw new Error('Token tidak tersedia pada respons login.');
       }
-      const mappedUser = mapLoginResponse(result);
+      const mappedUser = mapLoginResponse(resolveLoginUserPayload(result));
       setUser(mappedUser);
-      setToken(result.token);
-      await persist(mappedUser, result.token);
+      setToken(normalizedToken);
+      await persist(mappedUser, normalizedToken);
     },
     [persist]
   );

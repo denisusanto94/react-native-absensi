@@ -35,12 +35,26 @@ const request = async <T>(path: string, init?: RequestInit) => {
   return payload as T;
 };
 
-export type LoginResponse = {
-  token: string;
-  id_user: number;
-  email: string;
-  roles: string;
-  divisi: string;
+export type LoginUserPayload = {
+  id_user?: number;
+  id?: number;
+  email?: string;
+  roles?: string;
+  role?: string;
+  divisi?: string;
+  division?: string;
+};
+
+export type LoginResponse = LoginUserPayload & {
+  token?: string | null;
+  access_token?: string | null;
+  data?:
+    | (LoginUserPayload & {
+        token?: string | null;
+        access_token?: string | null;
+        user?: LoginUserPayload;
+      })
+    | null;
 };
 
 export type OfficeResponse = {
