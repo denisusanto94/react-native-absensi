@@ -38,7 +38,8 @@ export const SelfieCaptureSheet = ({
 }: Props) => {
   const [permission, requestPermission] = useCameraPermissions();
   const isExpoGo = Constants.appOwnership === "expo";
-  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+  const [mediaPermission, setMediaPermission] =
+    useState<MediaLibrary.PermissionResponse | null>(null);
   const cameraRef = useRef<CameraView | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -53,17 +54,13 @@ export const SelfieCaptureSheet = ({
     if (!permission?.granted) {
       requestPermission();
     }
-    if (!isExpoGo && !mediaPermission?.granted) {
-      requestMediaPermission();
+    if (isExpoGo) {
+      return;
     }
-  }, [
-    isExpoGo,
-    mediaPermission?.granted,
-    permission?.granted,
-    requestMediaPermission,
-    requestPermission,
-    visible,
-  ]);
+    MediaLibrary.getPermissionsAsync()
+      .then((status) => setMediaPermission(status))
+      .catch((error) => console.warn("Gagal memeriksa izin media", error));
+  }, [isExpoGo, permission?.granted, requestPermission, visible]);
 
   const takeSelfie = useCallback(async () => {
     if (!cameraRef.current) {
@@ -91,18 +88,18 @@ export const SelfieCaptureSheet = ({
     }
     if (!isExpoGo) {
       try {
-        if (!mediaPermission?.granted) {
-          const status = await requestMediaPermission();
-          if (!status?.granted) {
-            Alert.alert(
-              "Izin penyimpanan",
-              "Tidak dapat menyimpan foto tanpa izin akses media. Foto tetap digunakan untuk absensi."
-            );
-          } else {
-            await MediaLibrary.saveToLibraryAsync(previewUri);
-          }
-        } else {
+        let status = mediaPermission;
+        if (!status || status.status !== "granted") {
+          status = await MediaLibrary.requestPermissionsAsync();
+          setMediaPermission(status);
+        }
+        if (status.status === "granted") {
           await MediaLibrary.saveToLibraryAsync(previewUri);
+        } else {
+          Alert.alert(
+            "Izin penyimpanan",
+            "Tidak dapat menyimpan foto tanpa izin akses media. Foto tetap digunakan untuk absensi."
+          );
         }
       } catch (error) {
         console.warn("Gagal menyimpan selfie", error);
@@ -110,7 +107,7 @@ export const SelfieCaptureSheet = ({
     }
     onCaptured(previewUri);
     setPreviewUri(null);
-  }, [isExpoGo, mediaPermission?.granted, onCaptured, previewUri, requestMediaPermission]);
+  }, [isExpoGo, mediaPermission, onCaptured, previewUri]);
 
   const headerText = useMemo(
     () =>
