@@ -105,7 +105,9 @@ export const SelfieCaptureSheet = ({
         ) : (
           <View style={styles.cameraWrapper}>
             <CameraView
-              ref={(ref) => (cameraRef.current = ref)}
+              ref={(ref) => {
+                cameraRef.current = ref;
+              }}
               style={StyleSheet.absoluteFill}
               facing="front"
               enableTorch={false}

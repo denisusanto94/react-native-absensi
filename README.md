@@ -25,6 +25,13 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## API configuration
+
+- Semua data kantor dan absensi kini ditarik dari REST API internal.
+- Salin `.env.example` menjadi `.env` lalu set `EXPO_PUBLIC_API_BASE_URL` (mis. `http://192.168.0.10:3000/api`) saat menjalankan Expo bila tidak menggunakan `http://localhost:3000/api`.
+- Pengguna wajib login terlebih dahulu memakai endpoint `/auth/login_user`. Respons login harus menyertakan token JWT karena seluruh endpoint lain memakai header `Authorization: Bearer <token>`.
+- Daftar kantor diambil dari `/offices`, sedangkan proses check-in/out akan memanggil `/attendance/checkin`, `/attendance/checkout`, dan sinkronisasi dilakukan lewat `/attendance/submit`.
+
 ## Get a fresh project
 
 When you're ready, run:

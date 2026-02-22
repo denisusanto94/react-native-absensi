@@ -1,12 +1,13 @@
-import type { Coordinates } from "@/constants/attendance";
+import type { Coordinates } from '@/constants/attendance';
 
 export type AttendanceRecord = {
   id: string;
   name: string;
-  userId: string;
+  userId: number | null;
   checkIn: string;
   checkOut?: string;
-  officeType: string;
+  officeId: number | null;
+  officeName?: string;
   checkInLocation: Coordinates & { accuracy?: number };
   checkOutLocation?: Coordinates & { accuracy?: number };
   checkInSelfieUri?: string;
@@ -15,6 +16,6 @@ export type AttendanceRecord = {
 
 export type AttendanceProfile = {
   name: string;
-  userId: string;
-  officeType: string;
+  userId: number | null;
+  officeId: number | null;
 };

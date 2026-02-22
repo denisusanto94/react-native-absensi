@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -8,25 +9,24 @@ import {
   StyleSheet,
   Text,
   View,
-} from "react-native";
-import * as Location from "expo-location";
+} from 'react-native';
+import * as Location from 'expo-location';
 
-import { SummaryCard } from "@/components/attendance/SummaryCard";
-import { LocationGateCard } from "@/components/attendance/LocationGateCard";
-import { SelfieCaptureSheet } from "@/components/SelfieCaptureSheet";
+import { SummaryCard } from '@/components/attendance/SummaryCard';
+import { LocationGateCard } from '@/components/attendance/LocationGateCard';
+import { SelfieCaptureSheet } from '@/components/SelfieCaptureSheet';
 import {
   ALLOWED_RADIUS_METERS,
   Coordinates,
+  FALLBACK_OFFICE,
   UI_COLORS,
-  OFFICES,
-  EMPLOYEES,
-  DEFAULT_OFFICE,
-} from "@/constants/attendance";
-import { useAttendance } from "@/hooks/useAttendance";
-import { metersBetween } from "@/utils/geo";
+} from '@/constants/attendance';
+import { useAttendance } from '@/hooks/useAttendance';
+import { useAuth } from '@/hooks/useAuth';
+import { metersBetween } from '@/utils/geo';
 
 type PendingAction = {
-  type: "check-in" | "check-out";
+  type: 'check-in' | 'check-out';
   coords: Coordinates & { accuracy?: number };
 };
 
@@ -38,48 +38,43 @@ type LocationSnapshot = {
 };
 
 export default function DashboardScreen() {
-  const { profile, updateProfile, summary, activeRecord, checkIn, checkOut } =
-    useAttendance();
+  const {
+    profile,
+    updateProfile,
+    summary,
+    activeRecord,
+    checkIn,
+    checkOut,
+    offices,
+    officesLoading,
+    selectedOffice,
+    refreshOffices,
+  } = useAttendance();
+  const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const [locationInfo, setLocationInfo] = useState<LocationSnapshot | null>(
-    null
-  );
+  const [locationInfo, setLocationInfo] = useState<LocationSnapshot | null>(null);
   const [selfieSheetOpen, setSelfieSheetOpen] = useState(false);
-const [pendingAction, setPendingAction] = useState<PendingAction | null>(
-    null
-  );
-const MAX_ALLOWED_ACCURACY = 75;
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const MAX_ALLOWED_ACCURACY = 75;
 
-  const selectedEmployee = useMemo(
-    () => EMPLOYEES.find((employee) => employee.userid === profile.userId),
-    [profile.userId]
-  );
-
-  const selectedOffice = useMemo(
-    () =>
-      OFFICES.find((office) => office.type === profile.officeType) ??
-      DEFAULT_OFFICE,
-    [profile.officeType]
-  );
+  const officeForDisplay = selectedOffice ?? FALLBACK_OFFICE;
+  const allowedRadius = officeForDisplay.radius ?? ALLOWED_RADIUS_METERS;
 
   const fetchLocation = useCallback(async () => {
     const providerStatus = await Location.getProviderStatusAsync();
     if (!providerStatus.locationServicesEnabled) {
       Alert.alert(
-        "Layanan lokasi mati",
-        "Aktifkan GPS dan layanan lokasi agar absensi dapat berjalan."
+        'Layanan lokasi mati',
+        'Aktifkan GPS dan layanan lokasi agar absensi dapat berjalan.'
       );
       return null;
     }
 
     const permission = await Location.getForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
+    if (permission.status !== 'granted') {
       const request = await Location.requestForegroundPermissionsAsync();
-      if (request.status !== "granted") {
-        Alert.alert(
-          "Izin Lokasi",
-          "Izinkan akses lokasi agar sistem absensi bekerja."
-        );
+      if (request.status !== 'granted') {
+        Alert.alert('Izin Lokasi', 'Izinkan akses lokasi agar sistem absensi bekerja.');
         return null;
       }
     }
@@ -90,8 +85,8 @@ const MAX_ALLOWED_ACCURACY = 75;
 
     if (position.mocked) {
       Alert.alert(
-        "Lokasi palsu terdeteksi",
-        "Matikan aplikasi spoofing / mock location sebelum melakukan absensi."
+        'Lokasi palsu terdeteksi',
+        'Matikan aplikasi spoofing / mock location sebelum melakukan absensi.'
       );
       return null;
     }
@@ -104,23 +99,19 @@ const MAX_ALLOWED_ACCURACY = 75;
 
     if ((coords.accuracy ?? Infinity) > MAX_ALLOWED_ACCURACY) {
       Alert.alert(
-        "Akurasi lokasi rendah",
-        "Pindah ke area terbuka atau nyalakan GPS akurasi tinggi. (akurasi minimal 75 meter)."
+        'Akurasi lokasi rendah',
+        'Pindah ke area terbuka atau nyalakan GPS akurasi tinggi. (akurasi minimal 75 meter).'
       );
       return null;
     }
 
-    const distance = metersBetween(coords, selectedOffice);
+    const distance = metersBetween(coords, officeForDisplay);
 
     let label: string | undefined;
     try {
-      const [address] = await Location.reverseGeocodeAsync(position.coords, {
-        useGoogleMaps: false,
-      });
+      const [address] = await Location.reverseGeocodeAsync(position.coords);
       if (address) {
-        label = `${address.street ?? address.name ?? "Lokasi"} ${
-          address.district ?? ""
-        }`;
+        label = `${address.street ?? address.name ?? 'Lokasi'} ${address.district ?? ''}`;
       }
     } catch {
       label = undefined;
@@ -130,21 +121,21 @@ const MAX_ALLOWED_ACCURACY = 75;
       coords,
       distance,
       label,
-      updatedAt: new Date().toLocaleTimeString("id-ID"),
+      updatedAt: new Date().toLocaleTimeString('id-ID'),
     };
 
     setLocationInfo(snapshot);
     return snapshot;
-  }, [selectedOffice]);
+  }, [officeForDisplay]);
 
   const onRefreshLocation = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchLocation();
+      await Promise.all([fetchLocation(), refreshOffices()]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchLocation]);
+  }, [fetchLocation, refreshOffices]);
 
   useEffect(() => {
     fetchLocation();
@@ -152,24 +143,18 @@ const MAX_ALLOWED_ACCURACY = 75;
 
   const ensureProfileReady = useCallback(() => {
     if (!profile.userId) {
-      Alert.alert(
-        "Pilih Pegawai",
-        "Silakan pilih pegawai dari daftar yang tersedia."
-      );
+      Alert.alert('Profil belum siap', 'Silakan login ulang.');
       return false;
     }
-    if (!profile.officeType) {
-      Alert.alert(
-        "Pilih Kantor",
-        "Silakan pilih kantor yang sesuai sebelum melakukan absensi."
-      );
+    if (!profile.officeId) {
+      Alert.alert('Pilih Kantor', 'Silakan pilih kantor yang tersedia.');
       return false;
     }
     return true;
-  }, [profile.officeType, profile.userId]);
+  }, [profile.officeId, profile.userId]);
 
   const runAction = useCallback(
-    async (type: "check-in" | "check-out") => {
+    async (type: 'check-in' | 'check-out') => {
       const ready = ensureProfileReady();
       if (!ready) {
         return;
@@ -180,12 +165,10 @@ const MAX_ALLOWED_ACCURACY = 75;
         return;
       }
 
-      if (locationSnapshot.distance > ALLOWED_RADIUS_METERS) {
+      if (locationSnapshot.distance > allowedRadius) {
         Alert.alert(
-          "Di luar zona",
-          `Kamu berada ${locationSnapshot.distance.toFixed(
-            0
-          )} m dari kantor ${selectedOffice.type}. Mendekatlah lalu coba lagi.`
+          'Di luar zona',
+          `Kamu berada ${locationSnapshot.distance.toFixed(0)} m dari kantor ${officeForDisplay.name}. Mendekatlah lalu coba lagi.`
         );
         return;
       }
@@ -196,7 +179,7 @@ const MAX_ALLOWED_ACCURACY = 75;
       });
       setSelfieSheetOpen(true);
     },
-    [ensureProfileReady, fetchLocation, selectedOffice.type]
+    [allowedRadius, ensureProfileReady, fetchLocation, officeForDisplay.name]
   );
 
   const handleSelfieCaptured = useCallback(
@@ -207,24 +190,21 @@ const MAX_ALLOWED_ACCURACY = 75;
       }
 
       try {
-        if (pendingAction.type === "check-in") {
+        if (pendingAction.type === 'check-in') {
           await checkIn({
             coordinates: pendingAction.coords,
             selfieUri,
           });
-          Alert.alert("Check-in berhasil", "Selamat bekerja!");
+          Alert.alert('Check-in berhasil', 'Selamat bekerja!');
         } else {
           await checkOut({
             coordinates: pendingAction.coords,
             selfieUri,
           });
-          Alert.alert("Check-out berhasil", "Sampai jumpa lagi besok!");
+          Alert.alert('Check-out berhasil', 'Sampai jumpa lagi besok!');
         }
       } catch (error) {
-        Alert.alert(
-          "Ups",
-          error instanceof Error ? error.message : String(error)
-        );
+        Alert.alert('Ups', error instanceof Error ? error.message : String(error));
       } finally {
         setPendingAction(null);
         setSelfieSheetOpen(false);
@@ -235,31 +215,24 @@ const MAX_ALLOWED_ACCURACY = 75;
 
   const todaysSession = summary.todaysRecords[0];
   const checkInTime = todaysSession
-    ? new Date(todaysSession.checkIn).toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
+    ? new Date(todaysSession.checkIn).toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
       })
-    : "-";
+    : '-';
   const checkOutTime = todaysSession?.checkOut
-    ? new Date(todaysSession.checkOut).toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
+    ? new Date(todaysSession.checkOut).toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
       })
-    : "-";
+    : '-';
 
   const canCheckIn = useMemo(() => !activeRecord, [activeRecord]);
   const canCheckOut = useMemo(() => Boolean(activeRecord), [activeRecord]);
 
-  const handleSelectEmployee = useCallback(
-    (name: string, userId: string) => {
-      updateProfile({ name, userId });
-    },
-    [updateProfile]
-  );
-
   const handleSelectOffice = useCallback(
-    (officeType: string) => {
-      updateProfile({ officeType });
+    (officeId: number) => {
+      updateProfile({ officeId });
     },
     [updateProfile]
   );
@@ -268,12 +241,7 @@ const MAX_ALLOWED_ACCURACY = 75;
     <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefreshLocation}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefreshLocation} />}
       >
         <SummaryCard
           name={profile.name}
@@ -283,81 +251,59 @@ const MAX_ALLOWED_ACCURACY = 75;
         />
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Pilih Pegawai</Text>
-          <Text style={styles.cardSubtitle}>
-            Daftar diambil dari utils/data.json → employe
-          </Text>
-          <View style={styles.chipRow}>
-            {EMPLOYEES.map((employee) => {
-              const active = employee.userid === profile.userId;
-              return (
-                <Pressable
-                  key={employee.userid}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() =>
-                    handleSelectEmployee(employee.name, employee.userid)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      active && styles.chipTextActive,
-                    ]}
-                  >
-                    {employee.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            {EMPLOYEES.length === 0 ? (
-              <Text style={styles.emptyText}>Tidak ada data pegawai.</Text>
-            ) : null}
+          <Text style={styles.cardTitle}>Profil Pengguna</Text>
+          <Text style={styles.cardSubtitle}>Data login dari API /auth/login_user</Text>
+          <View style={styles.profileBlock}>
+            <Text style={styles.profileName}>{user?.email ?? profile.name}</Text>
+            <Text style={styles.helperText}>User ID: {user?.id ?? '-'}</Text>
+            <Text style={styles.helperText}>Divisi: {user?.division ?? '-'}</Text>
+            <Text style={styles.helperText}>Role: {user?.roles ?? '-'}</Text>
           </View>
-          {selectedEmployee ? (
-            <Text style={styles.helperText}>
-              User ID: {selectedEmployee.userid}
-            </Text>
-          ) : null}
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Zona Kantor</Text>
-          <Text style={styles.cardSubtitle}>
-            Sumber data dari utils/data.json → office
-          </Text>
+          <Text style={styles.cardSubtitle}>Data diambil langsung dari API /offices</Text>
           <View style={styles.officeList}>
-            {OFFICES.map((office) => {
-              const active = office.type === selectedOffice.type;
+            {officesLoading ? (
+              <View style={styles.loaderRow}>
+                <ActivityIndicator color={UI_COLORS.primary} />
+                <Text style={styles.helperText}>Memuat daftar kantor...</Text>
+              </View>
+            ) : null}
+            {offices.map((office) => {
+              const active = office.id === profile.officeId;
               return (
                 <Pressable
-                  key={office.type}
-                  style={[
-                    styles.officeCard,
-                    active && styles.officeCardActive,
-                  ]}
-                  onPress={() => handleSelectOffice(office.type)}
+                  key={office.id}
+                  style={[styles.officeCard, active && styles.officeCardActive]}
+                  onPress={() => handleSelectOffice(office.id)}
                 >
-                  <Text style={styles.officeType}>{office.type}</Text>
+                  <Text style={styles.officeType}>{office.name}</Text>
                   <Text style={styles.officeAddress}>{office.address}</Text>
+                  <Text style={styles.helperText}>Radius: {office.radius} m</Text>
                 </Pressable>
               );
             })}
-            {OFFICES.length === 0 ? (
-              <Text style={styles.emptyText}>Tidak ada data kantor.</Text>
+            {offices.length === 0 && !officesLoading ? (
+              <Text style={styles.emptyText}>Tidak ada data kantor. Tarik untuk menyegarkan.</Text>
             ) : null}
           </View>
+          <Pressable style={styles.refreshButton} onPress={refreshOffices}>
+            <Text style={styles.refreshText}>Segarkan data kantor</Text>
+          </Pressable>
         </View>
 
         <LocationGateCard
           distanceMeters={locationInfo?.distance ?? null}
-          allowedMeters={ALLOWED_RADIUS_METERS}
+          allowedMeters={allowedRadius}
           gpsLabel={locationInfo?.label}
           lastUpdated={locationInfo?.updatedAt}
-          officeName={selectedOffice.type}
-          officeAddress={selectedOffice.address}
+          officeName={officeForDisplay.name}
+          officeAddress={officeForDisplay.address}
           officeCoords={{
-            latitude: selectedOffice.latitude,
-            longitude: selectedOffice.longitude,
+            latitude: officeForDisplay.latitude,
+            longitude: officeForDisplay.longitude,
           }}
         />
 
@@ -374,31 +320,23 @@ const MAX_ALLOWED_ACCURACY = 75;
             </View>
           </View>
           <Text style={styles.sessionStatus}>
-            Status: {activeRecord ? "Sedang bekerja" : "Belum check-in"}
+            Status: {activeRecord ? 'Sedang bekerja' : 'Belum check-in'}
           </Text>
         </View>
 
         <View style={styles.actionsRow}>
           <Pressable
-            style={[
-              styles.actionButton,
-              styles.checkInButton,
-              !canCheckIn && styles.disabledButton,
-            ]}
+            style={[styles.actionButton, styles.checkInButton, !canCheckIn && styles.disabledButton]}
             disabled={!canCheckIn}
-            onPress={() => runAction("check-in")}
+            onPress={() => runAction('check-in')}
           >
             <Text style={styles.actionLabel}>Check-in</Text>
             <Text style={styles.actionHint}>Selfie & GPS</Text>
           </Pressable>
           <Pressable
-            style={[
-              styles.actionButton,
-              styles.checkOutButton,
-              !canCheckOut && styles.disabledButton,
-            ]}
+            style={[styles.actionButton, styles.checkOutButton, !canCheckOut && styles.disabledButton]}
             disabled={!canCheckOut}
-            onPress={() => runAction("check-out")}
+            onPress={() => runAction('check-out')}
           >
             <Text style={styles.actionLabel}>Check-out</Text>
             <Text style={styles.actionHint}>Kirim selfie pulang</Text>
@@ -408,7 +346,7 @@ const MAX_ALLOWED_ACCURACY = 75;
 
       <SelfieCaptureSheet
         visible={selfieSheetOpen}
-        mode={pendingAction?.type ?? "check-in"}
+        mode={pendingAction?.type ?? 'check-in'}
         onCaptured={handleSelfieCaptured}
         onDismiss={() => {
           setSelfieSheetOpen(false);
@@ -430,48 +368,32 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
     borderRadius: 24,
     padding: 16,
     gap: 8,
   },
   cardTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
     color: UI_COLORS.secondary,
   },
   cardSubtitle: {
     fontSize: 13,
-    color: "#6B7280",
+    color: '#6B7280',
   },
   helperText: {
     fontSize: 12,
-    color: "#7A849C",
+    color: '#7A849C',
   },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  profileBlock: {
+    gap: 4,
     marginTop: 4,
   },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#D5DAE6",
-    backgroundColor: "#fff",
-  },
-  chipActive: {
-    backgroundColor: UI_COLORS.primary,
-    borderColor: UI_COLORS.primary,
-  },
-  chipText: {
-    color: "#4B5565",
-    fontWeight: "500",
-  },
-  chipTextActive: {
-    color: "#fff",
+  profileName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: UI_COLORS.secondary,
   },
   officeList: {
     gap: 10,
@@ -480,57 +402,74 @@ const styles = StyleSheet.create({
   officeCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E4E8F5",
+    borderColor: '#E4E8F5',
     padding: 14,
-    backgroundColor: "#F8FAFF",
+    backgroundColor: '#F8FAFF',
   },
   officeCardActive: {
     borderColor: UI_COLORS.primary,
-    backgroundColor: "rgba(15, 98, 254, 0.08)",
+    backgroundColor: 'rgba(15, 98, 254, 0.08)',
   },
   officeType: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
     color: UI_COLORS.secondary,
   },
   officeAddress: {
     fontSize: 13,
-    color: "#6B7280",
+    color: '#6B7280',
     marginTop: 2,
   },
+  loaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDE3F4',
+  },
+  refreshText: {
+    color: UI_COLORS.primary,
+    fontWeight: '600',
+  },
   sessionCard: {
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
     borderRadius: 24,
     padding: 16,
     gap: 12,
   },
   sessionRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
   },
   sessionBlock: {
     flex: 1,
-    backgroundColor: "#F7F9FF",
+    backgroundColor: '#F7F9FF',
     borderRadius: 18,
     padding: 12,
   },
   sessionLabel: {
     fontSize: 12,
-    color: "#7A849C",
-    textTransform: "uppercase",
+    color: '#7A849C',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   sessionValue: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
     color: UI_COLORS.secondary,
   },
   sessionStatus: {
-    color: "#55617B",
+    color: '#55617B',
     fontSize: 14,
   },
   actionsRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
   },
   actionButton: {
@@ -549,16 +488,16 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   actionLabel: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   actionHint: {
-    color: "rgba(255,255,255,0.8)",
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 12,
   },
   emptyText: {
-    color: "#7A849C",
+    color: '#7A849C',
     marginTop: 4,
   },
 });
