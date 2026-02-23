@@ -17,6 +17,7 @@ import { api, type LeaveRecord } from '@/utils/api';
 
 const APPROVAL_PERMISSIONS = [
   'manage_approve_leaves_staf',
+  'manage_approve_leaves_staff',
   'manage_approve_leaves_supervisor',
   'manage_approve_leaves_manager',
   'manage_approve_leaves_co_ceo',
@@ -25,6 +26,52 @@ const APPROVAL_PERMISSIONS = [
   'manage_approve_leaves_cto',
   'manage_approve_leaves_owners',
 ];
+
+const ROLE_ALIASES: Record<string, string> = {
+  staff: 'staf',
+  karyawan: 'staf',
+  manajer: 'manager',
+  owner: 'owners',
+};
+
+const ROLE_APPROVAL_PERMISSIONS: Record<string, string[]> = {
+  staf: ['manage_approve_leaves_staf', 'manage_approve_leaves_staff'],
+  supervisor: ['manage_approve_leaves_supervisor'],
+  manager: ['manage_approve_leaves_manager'],
+  co_ceo: ['manage_approve_leaves_co_ceo'],
+  co_cto: ['manage_approve_leaves_co_cto'],
+  ceo: ['manage_approve_leaves_ceo'],
+  cto: ['manage_approve_leaves_cto'],
+  owners: [],
+};
+
+const normalizePermission = (value?: string | null) => value?.toString().toLowerCase().trim() ?? '';
+
+const normalizeRole = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  const normalized = value
+    .toString()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .trim();
+  if (!normalized) {
+    return null;
+  }
+  return ROLE_ALIASES[normalized] ?? normalized;
+};
+
+const resolveLeaveApplicantRole = (leave: LeaveRecord) =>
+  normalizeRole(leave.user_role ?? leave.user_roles ?? leave.role);
+
+const getRequiredPermissionsForLeave = (leave: LeaveRecord) => {
+  const applicantRole = resolveLeaveApplicantRole(leave);
+  if (!applicantRole) {
+    return null;
+  }
+  return ROLE_APPROVAL_PERMISSIONS[applicantRole] ?? null;
+};
 
 const leaveOptions = [
   { label: 'Sakit', value: 'sick' },
@@ -106,12 +153,41 @@ export default function CutiScreen() {
     return leaves.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [leaves]);
 
-  const canModerateLeaves = useMemo(() => {
+  const normalizedApprovalPermissions = useMemo(() => {
     if (!user?.permissions?.length) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      user.permissions
+        .map((permission) => normalizePermission(permission))
+        .filter(Boolean)
+    );
+  }, [user?.permissions]);
+
+  const hasAnyApprovalPermission = useMemo(() => {
+    if (!normalizedApprovalPermissions.size) {
       return false;
     }
-    return user.permissions.some((permission) => APPROVAL_PERMISSIONS.includes(permission));
-  }, [user?.permissions]);
+    return APPROVAL_PERMISSIONS.some((permission) => normalizedApprovalPermissions.has(permission));
+  }, [normalizedApprovalPermissions]);
+
+  const canModerateLeave = useCallback(
+    (leave: LeaveRecord) => {
+      if (!normalizedApprovalPermissions.size) {
+        return false;
+      }
+      const requiredPermissions = getRequiredPermissionsForLeave(leave);
+      if (requiredPermissions === null) {
+        return hasAnyApprovalPermission;
+      }
+      if (!requiredPermissions.length) {
+        return false;
+      }
+      return requiredPermissions.some((permission) => normalizedApprovalPermissions.has(permission));
+    },
+    [hasAnyApprovalPermission, normalizedApprovalPermissions]
+  );
 
   const handleModeration = useCallback(
     async (leave: LeaveRecord, nextStatus: 'approved' | 'rejected') => {
@@ -239,81 +315,87 @@ export default function CutiScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <Text style={styles.cardTitleText}>{item.leave_type.toUpperCase()}</Text>
-              <View style={[styles.statusPill, getStatusColor(item.status)]}>
-                <Text style={styles.statusText}>{item.status}</Text>
+        renderItem={({ item }) => {
+          const canModerateThisLeave = canModerateLeave(item);
+          const canManageOwnLeave = item.user_id === user?.id;
+          const shouldShowActions = item.status === 'pending' && (canModerateThisLeave || canManageOwnLeave);
+
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardRow}>
+                <Text style={styles.cardTitleText}>{item.leave_type.toUpperCase()}</Text>
+                <View style={[styles.statusPill, getStatusColor(item.status)]}>
+                  <Text style={styles.statusText}>{item.status}</Text>
+                </View>
               </View>
+              <Text style={styles.cardDate}>
+                {formatDateInput(item.start_date)} s/d {formatDateInput(item.end_date)}
+              </Text>
+              <Text style={styles.cardReason}>{item.reason}</Text>
+              <Text style={styles.cardMeta}>Diajukan: {new Date(item.created_at).toLocaleString('id-ID')}</Text>
+              {item.user_name ? (
+                <Text style={styles.cardMeta}>Pemohon: {item.user_name}</Text>
+              ) : null}
+              {item.approved_by_name ? (
+                <Text style={styles.cardMeta}>Disetujui oleh: {item.approved_by_name}</Text>
+              ) : null}
+              {shouldShowActions ? (
+                <View style={styles.cardActions}>
+                  {canModerateThisLeave ? (
+                    <View style={styles.actionRow}>
+                      <Pressable
+                        style={[
+                          styles.actionButton,
+                          styles.approveButton,
+                          isProcessing(item.id, 'approve') && styles.disabledActionButton,
+                        ]}
+                        onPress={() => handleModeration(item, 'approved')}
+                        disabled={isProcessing(item.id, 'approve')}
+                      >
+                        {isProcessing(item.id, 'approve') ? (
+                          <ActivityIndicator size="small" color={UI_COLORS.secondary} />
+                        ) : (
+                          <Text style={[styles.actionText, styles.approveText]}>Setujui</Text>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.actionButton,
+                          styles.rejectButton,
+                          isProcessing(item.id, 'reject') && styles.disabledActionButton,
+                        ]}
+                        onPress={() => handleModeration(item, 'rejected')}
+                        disabled={isProcessing(item.id, 'reject')}
+                      >
+                        {isProcessing(item.id, 'reject') ? (
+                          <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                          <Text style={[styles.actionText, styles.rejectText]}>Tolak</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {canManageOwnLeave ? (
+                    <Pressable
+                      style={[
+                        styles.deleteButton,
+                        isProcessing(item.id, 'delete') && styles.disabledActionButton,
+                      ]}
+                      onPress={() => handleDeleteLeave(item)}
+                      disabled={isProcessing(item.id, 'delete')}
+                    >
+                      {isProcessing(item.id, 'delete') ? (
+                        <ActivityIndicator size="small" color="#C2410C" />
+                      ) : (
+                        <Text style={[styles.actionText, styles.deleteText]}>Batalkan Pengajuan</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.cardDate}>
-              {formatDateInput(item.start_date)} s/d {formatDateInput(item.end_date)}
-            </Text>
-            <Text style={styles.cardReason}>{item.reason}</Text>
-            <Text style={styles.cardMeta}>Diajukan: {new Date(item.created_at).toLocaleString('id-ID')}</Text>
-            {item.user_name ? (
-              <Text style={styles.cardMeta}>Pemohon: {item.user_name}</Text>
-            ) : null}
-            {item.approved_by_name ? (
-              <Text style={styles.cardMeta}>Disetujui oleh: {item.approved_by_name}</Text>
-            ) : null}
-            {(canModerateLeaves || item.user_id === user?.id) && item.status === 'pending' ? (
-              <View style={styles.cardActions}>
-                {canModerateLeaves ? (
-                  <View style={styles.actionRow}>
-                    <Pressable
-                      style={[
-                        styles.actionButton,
-                        styles.approveButton,
-                        isProcessing(item.id, 'approve') && styles.disabledActionButton,
-                      ]}
-                      onPress={() => handleModeration(item, 'approved')}
-                      disabled={isProcessing(item.id, 'approve')}
-                    >
-                      {isProcessing(item.id, 'approve') ? (
-                        <ActivityIndicator size="small" color={UI_COLORS.secondary} />
-                      ) : (
-                        <Text style={[styles.actionText, styles.approveText]}>Setujui</Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.actionButton,
-                        styles.rejectButton,
-                        isProcessing(item.id, 'reject') && styles.disabledActionButton,
-                      ]}
-                      onPress={() => handleModeration(item, 'rejected')}
-                      disabled={isProcessing(item.id, 'reject')}
-                    >
-                      {isProcessing(item.id, 'reject') ? (
-                        <ActivityIndicator size="small" color="#DC2626" />
-                      ) : (
-                        <Text style={[styles.actionText, styles.rejectText]}>Tolak</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : null}
-                {item.user_id === user?.id ? (
-                  <Pressable
-                    style={[
-                      styles.deleteButton,
-                      isProcessing(item.id, 'delete') && styles.disabledActionButton,
-                    ]}
-                    onPress={() => handleDeleteLeave(item)}
-                    disabled={isProcessing(item.id, 'delete')}
-                  >
-                    {isProcessing(item.id, 'delete') ? (
-                      <ActivityIndicator size="small" color="#C2410C" />
-                    ) : (
-                      <Text style={[styles.actionText, styles.deleteText]}>Batalkan Pengajuan</Text>
-                    )}
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        )}
+          );
+        }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           loading ? null : (

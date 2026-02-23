@@ -97,6 +97,9 @@ export type LeaveRecord = {
   created_at: string;
   user_name?: string | null;
   approved_by_name?: string | null;
+  user_role?: string | null;
+  user_roles?: string | null;
+  role?: string | null;
 };
 
 export type LeaveRequestPayload = {
