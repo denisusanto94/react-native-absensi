@@ -84,6 +84,11 @@ export const SelfieCaptureSheet = ({
     }
   }, []);
 
+  const handleSkipSelfie = useCallback(() => {
+    onCaptured("");
+    setPreviewUri(null);
+  }, [onCaptured]);
+
   const handleUseSelfie = useCallback(async () => {
     if (!previewUri) {
       return;
@@ -185,6 +190,9 @@ export const SelfieCaptureSheet = ({
             <Pressable style={styles.permissionButton} onPress={requestPermission}>
               <Text style={styles.permissionButtonText}>Izinkan Kamera</Text>
             </Pressable>
+            <Pressable style={styles.skipButton} onPress={handleSkipSelfie}>
+              <Text style={styles.skipButtonText}>Lanjut Tanpa Selfie</Text>
+            </Pressable>
           </View>
         ) : previewUri ? (
           <View ref={previewRef} style={styles.previewWrapper} collapsable={false}>
@@ -209,7 +217,7 @@ export const SelfieCaptureSheet = ({
         )}
 
         <View style={styles.footer}>
-          {previewUri ? (
+          {!permission?.granted ? null : previewUri ? (
             <View style={styles.actionsRow}>
               <Pressable style={styles.secondaryButton} onPress={() => setPreviewUri(null)}>
                 <Text style={styles.secondaryButtonText}>Ulangi Foto</Text>
@@ -231,9 +239,13 @@ export const SelfieCaptureSheet = ({
               )}
             </Pressable>
           )}
-          <Text style={styles.helperText}>
-            Foto disimpan hanya di perangkat ini sebagai bukti selfie.
-          </Text>
+          {!permission?.granted ? (
+            <Text style={styles.helperText}>Selfie opsional jika izin kamera ditolak.</Text>
+          ) : (
+            <Text style={styles.helperText}>
+              Foto disimpan hanya di perangkat ini sebagai bukti selfie.
+            </Text>
+          )}
         </View>
       </View>
     </Modal>
@@ -281,6 +293,18 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: {
     color: "#fff",
+    fontWeight: "600",
+  },
+  skipButton: {
+    marginTop: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#DDE3F4",
+  },
+  skipButtonText: {
+    color: UI_COLORS.secondary,
     fontWeight: "600",
   },
   cameraWrapper: {
