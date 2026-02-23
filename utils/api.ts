@@ -114,6 +114,7 @@ export type AttendancePhotoResponse = {
   message?: string;
   filename?: string;
   attendance_id?: number;
+  attendance_transum_id?: number;
 };
 
 const authHeaders = (token?: string) =>
@@ -208,6 +209,24 @@ export const api = {
       },
       body: JSON.stringify(payload),
     }),
+  checkInTransum: (token: string, payload: CoordinatesPayload) =>
+    request<{ message?: string }>("/attendance-transum/checkin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeaders(token) ?? {}),
+      },
+      body: JSON.stringify(payload),
+    }),
+  checkOutTransum: (token: string, payload: CoordinatesPayload) =>
+    request<{ message?: string }>("/attendance-transum/checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeaders(token) ?? {}),
+      },
+      body: JSON.stringify(payload),
+    }),
   getLeaves: (token: string) =>
     request<LeaveRecord[]>("/leaves", {
       method: "GET",
@@ -250,6 +269,22 @@ export const api = {
     }),
   uploadAttendancePhotoCheckOut: (token: string, uri: string) =>
     request<AttendancePhotoResponse>("/attendance-foto/checkout", {
+      method: "POST",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
+      body: buildPhotoFormData(uri),
+    }),
+  uploadTransumPhotoCheckIn: (token: string, uri: string) =>
+    request<AttendancePhotoResponse>("/attendance-transum-foto/checkin", {
+      method: "POST",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
+      body: buildPhotoFormData(uri),
+    }),
+  uploadTransumPhotoCheckOut: (token: string, uri: string) =>
+    request<AttendancePhotoResponse>("/attendance-transum-foto/checkout", {
       method: "POST",
       headers: {
         ...(authHeaders(token) ?? {}),

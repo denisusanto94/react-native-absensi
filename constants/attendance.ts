@@ -28,6 +28,11 @@ export const ATTENDANCE_STORAGE_KEYS = {
   profile: '@absensi/profile',
 } as const;
 
+export const ATTENDANCE_TRANSUM_STORAGE_KEYS = {
+  records: '@absensi/transum/records',
+  profile: '@absensi/transum/profile',
+} as const;
+
 export const UI_COLORS = {
   primary: '#0F62FE',
   secondary: '#001D6C',

@@ -49,6 +49,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="absen-transum"
+        options={{
+          title: 'Transum',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'bus' : 'bus-outline'} size={26} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="cuti"
         options={{
           title: 'Cuti',
