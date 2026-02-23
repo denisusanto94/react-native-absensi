@@ -1,0 +1,7 @@
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL
+Starting project at D:\Pekerjaan\Freelance\react-native\react-native-absensi
+React Compiler enabled
+Starting Metro Bundler
+Waiting on http://localhost:8082
+Logs for your project will appear below.

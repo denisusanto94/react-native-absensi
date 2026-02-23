@@ -128,17 +128,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const result = await api.loginUser(email, password);
       let normalizedToken = resolveLoginToken(result)?.toString();
       let userPayload = resolveLoginUserPayload(result);
+      let fallbackUserPayload: LoginUserPayload | null = null;
 
       if (!normalizedToken) {
         try {
           const fallback = await api.login(email, password);
           normalizedToken = resolveLoginToken(fallback)?.toString() ?? null;
-          if (!userPayload.email) {
-            userPayload = resolveLoginUserPayload(fallback);
-          }
+          fallbackUserPayload = resolveLoginUserPayload(fallback);
         } catch (error) {
           console.warn('Fallback login failed', error);
         }
+      }
+
+      if (!userPayload.email && fallbackUserPayload?.email) {
+        userPayload = fallbackUserPayload;
+      } else if (fallbackUserPayload) {
+        const mergedPermissions =
+          userPayload.permissions ??
+          userPayload.permission ??
+          fallbackUserPayload.permissions ??
+          fallbackUserPayload.permission ??
+          null;
+
+        userPayload = {
+          ...fallbackUserPayload,
+          ...userPayload,
+          permissions: mergedPermissions ?? undefined,
+          permission: mergedPermissions ?? undefined,
+        };
       }
 
       if (!normalizedToken) {

@@ -185,8 +185,8 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   updateLeaveStatus: (token: string, leaveId: number, status: "approved" | "rejected") =>
-    request<{ message?: string }>(`/leaves/${leaveId}`, {
-      method: "PATCH",
+    request<{ message?: string }>(`/leaves/${leaveId}/status`, {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
         ...(authHeaders(token) ?? {}),
