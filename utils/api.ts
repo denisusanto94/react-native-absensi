@@ -43,6 +43,8 @@ export type LoginUserPayload = {
   role?: string;
   divisi?: string;
   division?: string;
+  permissions?: string[] | string | null;
+  permission?: string[] | string | null;
 };
 
 export type LoginResponse = LoginUserPayload & {
@@ -178,5 +180,21 @@ export const api = {
         ...(authHeaders(token) ?? {}),
       },
       body: JSON.stringify(payload),
+    }),
+  updateLeaveStatus: (token: string, leaveId: number, status: "approved" | "rejected") =>
+    request<{ message?: string }>(`/leaves/${leaveId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeaders(token) ?? {}),
+      },
+      body: JSON.stringify({ status }),
+    }),
+  deleteLeave: (token: string, leaveId: number) =>
+    request<{ message?: string }>(`/leaves/${leaveId}`, {
+      method: "DELETE",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
     }),
 };

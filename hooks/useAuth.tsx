@@ -8,6 +8,7 @@ export type AuthUser = {
   email: string;
   roles: string;
   division: string;
+  permissions: string[];
 };
 
 type AuthContextValue = {
@@ -43,6 +44,22 @@ const resolveLoginUserPayload = (payload: LoginResponse): LoginUserPayload => {
   return payload;
 };
 
+const normalizePermissions = (value: unknown): string[] => {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => entry?.toString()).filter((entry): entry is string => Boolean(entry?.trim()));
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[,|\s]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const mapLoginResponse = (payload: LoginUserPayload): AuthUser => {
   const id = payload.id_user ?? payload.id;
   const email = payload.email;
@@ -56,6 +73,7 @@ const mapLoginResponse = (payload: LoginUserPayload): AuthUser => {
     email,
     roles: payload.roles ?? payload.role ?? '-',
     division: payload.divisi ?? payload.division ?? '-',
+    permissions: normalizePermissions(payload.permissions ?? payload.permission),
   };
 };
 
@@ -76,7 +94,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setToken(parsed.token);
         }
         if (parsed.user) {
-          setUser(parsed.user);
+          const restoredUser: AuthUser = {
+            ...parsed.user,
+            permissions: Array.isArray(parsed.user.permissions)
+              ? parsed.user.permissions
+              : normalizePermissions(parsed.user.permissions),
+          };
+          setUser(restoredUser);
         }
       } catch (error) {
         console.warn('Failed to rehydrate auth state', error);

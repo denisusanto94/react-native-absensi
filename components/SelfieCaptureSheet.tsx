@@ -9,7 +9,11 @@ import {
   Text,
   View,
 } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import {
+  CameraView,
+  useCameraPermissions,
+  type CameraMountError,
+} from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import * as MediaLibrary from "expo-media-library";
 import Constants from "expo-constants";
@@ -45,27 +49,47 @@ export const SelfieCaptureSheet = ({
   const previewRef = useRef<View | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const resetCameraSession = useCallback(() => {
+    setCameraReady(false);
+    setCameraError(null);
+    setCameraKey((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (!visible) {
       setPreviewUri(null);
       setCapturing(false);
+      resetCameraSession();
       return;
     }
 
-    if (!permission?.granted) {
+    if (!permission) {
       requestPermission();
+      return;
     }
-    if (isExpoGo) {
+
+    if (!permission.granted) {
+      return;
+    }
+
+    resetCameraSession();
+  }, [permission, requestPermission, resetCameraSession, visible]);
+
+  useEffect(() => {
+    if (!visible || isExpoGo) {
       return;
     }
     MediaLibrary.getPermissionsAsync()
       .then((status) => setMediaPermission(status))
       .catch((error) => console.warn("Gagal memeriksa izin media", error));
-  }, [isExpoGo, permission?.granted, requestPermission, visible]);
+  }, [isExpoGo, visible]);
 
   const takeSelfie = useCallback(async () => {
-    if (!cameraRef.current) {
+    if (!cameraRef.current || !cameraReady) {
       return;
     }
     setCapturing(true);
@@ -82,12 +106,13 @@ export const SelfieCaptureSheet = ({
     } finally {
       setCapturing(false);
     }
-  }, []);
+  }, [cameraReady]);
 
   const handleSkipSelfie = useCallback(() => {
     onCaptured("");
     setPreviewUri(null);
-  }, [onCaptured]);
+    resetCameraSession();
+  }, [onCaptured, resetCameraSession]);
 
   const handleUseSelfie = useCallback(async () => {
     if (!previewUri) {
@@ -129,7 +154,17 @@ export const SelfieCaptureSheet = ({
     }
     onCaptured(finalUri);
     setPreviewUri(null);
-  }, [mediaPermission, isExpoGo, onCaptured, previewUri]);
+    resetCameraSession();
+  }, [mediaPermission, isExpoGo, onCaptured, previewUri, resetCameraSession]);
+
+  const handleRetake = useCallback(() => {
+    setPreviewUri(null);
+    resetCameraSession();
+  }, [resetCameraSession]);
+
+  const handleCameraError = useCallback((event: CameraMountError) => {
+    setCameraError(event.message ?? "Kamera tidak dapat dibuka.");
+  }, []);
 
   const headerText = useMemo(
     () =>
@@ -199,18 +234,37 @@ export const SelfieCaptureSheet = ({
             <Image source={{ uri: previewUri }} style={styles.previewImage} />
             {renderWatermark()}
           </View>
+        ) : cameraError ? (
+          <View style={styles.cameraErrorContainer}>
+            <Text style={styles.permissionText}>Kamera tidak bisa dimuat.</Text>
+            <Text style={styles.helperText}>{cameraError}</Text>
+            <Pressable style={styles.permissionButton} onPress={resetCameraSession}>
+              <Text style={styles.permissionButtonText}>Coba Lagi</Text>
+            </Pressable>
+          </View>
         ) : (
           <View style={styles.cameraWrapper}>
             <CameraView
+              key={cameraKey}
               ref={(ref) => {
                 cameraRef.current = ref;
               }}
               style={StyleSheet.absoluteFill}
               facing="front"
               enableTorch={false}
+              active={visible && !previewUri}
+              onCameraReady={() => setCameraReady(true)}
+              onMountError={handleCameraError}
             />
             <View style={styles.cameraOverlay}>
-              <Text style={styles.overlayText}>Posisikan wajahmu di tengah layar</Text>
+              {cameraReady ? (
+                <Text style={styles.overlayText}>Posisikan wajahmu di tengah layar</Text>
+              ) : (
+                <View style={styles.cameraLoading}>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.overlayText}>Menyiapkan kamera...</Text>
+                </View>
+              )}
             </View>
             {renderWatermark()}
           </View>
@@ -219,7 +273,7 @@ export const SelfieCaptureSheet = ({
         <View style={styles.footer}>
           {!permission?.granted ? null : previewUri ? (
             <View style={styles.actionsRow}>
-              <Pressable style={styles.secondaryButton} onPress={() => setPreviewUri(null)}>
+              <Pressable style={styles.secondaryButton} onPress={handleRetake}>
                 <Text style={styles.secondaryButtonText}>Ulangi Foto</Text>
               </Pressable>
               <Pressable style={styles.primaryButton} onPress={handleUseSelfie}>
@@ -228,9 +282,12 @@ export const SelfieCaptureSheet = ({
             </View>
           ) : (
             <Pressable
-              style={[styles.primaryButton, capturing && styles.disabledButton]}
+              style={[
+                styles.primaryButton,
+                (capturing || !cameraReady || !!cameraError) && styles.disabledButton,
+              ]}
               onPress={takeSelfie}
-              disabled={capturing}
+              disabled={capturing || !cameraReady || !!cameraError}
             >
               {capturing ? (
                 <ActivityIndicator color="#fff" />
@@ -328,6 +385,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
   },
+  cameraLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   previewWrapper: {
     flex: 1,
     borderRadius: 32,
@@ -393,5 +455,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     lineHeight: 14,
+  },
+  cameraErrorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 12,
   },
 });
