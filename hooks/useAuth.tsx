@@ -17,9 +17,14 @@ type AuthContextValue = {
   status: 'loading' | 'authenticated' | 'unauthenticated';
   login: (params: { email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
+  biometricEnabled: boolean;
+  biometricReady: boolean;
+  setBiometricEnabled: (nextEnabled: boolean) => Promise<void>;
+  restoreBiometricSession: () => Promise<void>;
 };
 
 const AUTH_STORAGE_KEY = '@absensi/auth';
+const BIOMETRIC_STORAGE_KEY = '@absensi/biometric';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -81,6 +86,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(true);
+  const [biometricState, setBiometricState] = useState<{
+    enabled: boolean;
+    storedUser: AuthUser | null;
+    storedToken: string | null;
+  }>({
+    enabled: false,
+    storedUser: null,
+    storedToken: null,
+  });
 
   useEffect(() => {
     const restore = async () => {
@@ -112,6 +126,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     restore();
   }, []);
 
+  useEffect(() => {
+    const restoreBiometric = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(BIOMETRIC_STORAGE_KEY);
+        if (!raw) {
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        setBiometricState({
+          enabled: Boolean(parsed.enabled),
+          storedUser: parsed.storedUser ?? null,
+          storedToken: parsed.storedToken ?? null,
+        });
+      } catch (error) {
+        console.warn('Failed to rehydrate biometric setting', error);
+      }
+    };
+
+    restoreBiometric();
+  }, []);
+
   const persist = useCallback(async (nextUser: AuthUser | null, nextToken: string | null) => {
     if (nextUser && nextToken) {
       await AsyncStorage.setItem(
@@ -123,10 +158,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const persistBiometricState = useCallback(
+    async (nextState: { enabled: boolean; storedUser: AuthUser | null; storedToken: string | null }) => {
+      setBiometricState(nextState);
+      try {
+        await AsyncStorage.setItem(BIOMETRIC_STORAGE_KEY, JSON.stringify(nextState));
+      } catch (error) {
+        console.warn('Failed to persist biometric setting', error);
+      }
+    },
+    []
+  );
+
+  const applySession = useCallback(
+    async (nextUser: AuthUser, nextToken: string) => {
+      setUser(nextUser);
+      setToken(nextToken);
+      await persist(nextUser, nextToken);
+    },
+    [persist]
+  );
+
   const login = useCallback(
     async ({ email, password }: { email: string; password: string }) => {
       const result = await api.loginUser(email, password);
-      let normalizedToken = resolveLoginToken(result)?.toString();
+      let normalizedToken: string | null = resolveLoginToken(result)?.toString() ?? null;
       let userPayload = resolveLoginUserPayload(result);
       let fallbackUserPayload: LoginUserPayload | null = null;
 
@@ -163,11 +219,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const mappedUser = mapLoginResponse(userPayload);
-      setUser(mappedUser);
-      setToken(normalizedToken);
-      await persist(mappedUser, normalizedToken);
+      await applySession(mappedUser, normalizedToken);
+
+      if (biometricState.enabled) {
+        await persistBiometricState({
+          enabled: true,
+          storedUser: mappedUser,
+          storedToken: normalizedToken,
+        });
+      }
     },
-    [persist]
+    [applySession, biometricState.enabled, persistBiometricState]
   );
 
   const logout = useCallback(async () => {
@@ -175,6 +237,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     await persist(null, null);
   }, [persist]);
+
+  const setBiometricEnabled = useCallback(
+    async (nextEnabled: boolean) => {
+      if (nextEnabled) {
+        if (!user || !token) {
+          throw new Error('Aktifkan biometrik setelah berhasil login.');
+        }
+        await persistBiometricState({
+          enabled: true,
+          storedUser: user,
+          storedToken: token,
+        });
+        return;
+      }
+      await persistBiometricState({
+        enabled: false,
+        storedUser: null,
+        storedToken: null,
+      });
+    },
+    [persistBiometricState, token, user]
+  );
+
+  const restoreBiometricSession = useCallback(async () => {
+    if (!biometricState.enabled || !biometricState.storedUser || !biometricState.storedToken) {
+      throw new Error('Biometrik belum dikonfigurasi.');
+    }
+    await applySession(biometricState.storedUser, biometricState.storedToken);
+  }, [applySession, biometricState.enabled, biometricState.storedToken, biometricState.storedUser]);
 
   const status: AuthContextValue['status'] = hydrating
     ? 'loading'
@@ -189,8 +280,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       status,
       login,
       logout,
+      biometricEnabled: biometricState.enabled,
+      biometricReady: Boolean(
+        biometricState.enabled && biometricState.storedUser && biometricState.storedToken
+      ),
+      setBiometricEnabled,
+      restoreBiometricSession,
     }),
-    [login, logout, status, token, user]
+    [
+      biometricState.enabled,
+      biometricState.storedToken,
+      biometricState.storedUser,
+      login,
+      logout,
+      restoreBiometricSession,
+      setBiometricEnabled,
+      status,
+      token,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

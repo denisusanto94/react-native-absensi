@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,19 +12,51 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 import { UI_COLORS } from '@/constants/attendance';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, status } = useAuth();
+  const { login, status, biometricEnabled, biometricReady, restoreBiometricSession } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [checkingBiometric, setCheckingBiometric] = useState(true);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   const isBusy = submitting || status === 'loading';
   const canSubmit = useMemo(() => email.length > 0 && password.length >= 6 && !isBusy, [email.length, isBusy, password.length]);
+  const showBiometricLogin = biometricEnabled && biometricReady && biometricSupported && !checkingBiometric;
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkHardware = async () => {
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!cancelled) {
+          setBiometricSupported(hasHardware && isEnrolled);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBiometricSupported(false);
+          console.warn('Biometric hardware check failed', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingBiometric(false);
+        }
+      }
+    };
+
+    checkHardware();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
@@ -38,6 +70,26 @@ export default function LoginScreen() {
       setSubmitting(false);
     }
   }, [canSubmit, email, login, password, router]);
+
+  const handleBiometricLogin = useCallback(async () => {
+    setBiometricLoading(true);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Login dengan biometrik',
+        fallbackLabel: 'Masukkan kata sandi',
+        cancelLabel: 'Batal',
+      });
+      if (!result.success) {
+        return;
+      }
+      await restoreBiometricSession();
+      router.replace('/(tabs)');
+    } catch (error) {
+      Alert.alert('Biometrik gagal', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBiometricLoading(false);
+    }
+  }, [restoreBiometricSession, router]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -83,6 +135,20 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>Masuk</Text>
             )}
           </Pressable>
+
+          {showBiometricLogin ? (
+            <Pressable
+              style={[styles.secondaryButton, biometricLoading && styles.buttonDisabled]}
+              disabled={biometricLoading}
+              onPress={handleBiometricLogin}
+            >
+              {biometricLoading ? (
+                <ActivityIndicator color={UI_COLORS.secondary} />
+              ) : (
+                <Text style={styles.secondaryButtonText}>Masuk dengan sidik jari</Text>
+              )}
+            </Pressable>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -142,6 +208,20 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: UI_COLORS.secondary,
+    backgroundColor: '#fff',
+  },
+  secondaryButtonText: {
+    color: UI_COLORS.secondary,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

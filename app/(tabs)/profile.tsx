@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -8,7 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, biometricEnabled, setBiometricEnabled } = useAuth();
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -18,6 +19,26 @@ export default function ProfileScreen() {
       Alert.alert('Gagal keluar', error instanceof Error ? error.message : String(error));
     }
   }, [logout, router]);
+
+  const handleBiometricToggle = useCallback(
+    async (nextValue: boolean) => {
+      setBiometricLoading(true);
+      try {
+        await setBiometricEnabled(nextValue);
+        if (nextValue) {
+          Alert.alert('Biometrik aktif', 'Selanjutnya kamu bisa login dengan sidik jari.');
+        }
+      } catch (error) {
+        Alert.alert(
+          'Gagal mengubah biometrik',
+          error instanceof Error ? error.message : String(error)
+        );
+      } finally {
+        setBiometricLoading(false);
+      }
+    },
+    [setBiometricEnabled]
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -30,6 +51,19 @@ export default function ProfileScreen() {
           <ProfileRow label="User ID" value={user?.id ? String(user.id) : '-'} />
           <ProfileRow label="Divisi" value={user?.division ?? '-'} />
           <ProfileRow label="Role" value={user?.roles ?? '-'} />
+          <View style={styles.biometricRow}>
+            <View style={styles.biometricText}>
+              <Text style={styles.profileValue}>Login sidik jari</Text>
+              <Text style={styles.helperText}>Aktifkan untuk menggunakan biometrik di halaman login.</Text>
+            </View>
+            <Switch
+              value={biometricEnabled}
+              onValueChange={handleBiometricToggle}
+              disabled={biometricLoading}
+              trackColor={{ true: UI_COLORS.primary, false: '#D1D5DB' }}
+              thumbColor="#fff"
+            />
+          </View>
         </View>
 
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
@@ -90,6 +124,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: UI_COLORS.secondary,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  biometricRow: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  biometricText: {
+    flex: 1,
   },
   logoutButton: {
     marginTop: 'auto',
