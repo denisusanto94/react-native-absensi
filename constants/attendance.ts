@@ -33,6 +33,21 @@ export const ATTENDANCE_TRANSUM_STORAGE_KEYS = {
   profile: '@absensi/transum/profile',
 } as const;
 
+export const TRANSUM_DOMICILES = [
+  'Jakarta Pusat',
+  'Jakarta Timur',
+  'Jakarta Utara',
+  'Jakarta Barat',
+  'Jakarta Selatan',
+  'Bekasi',
+  'Tangerang Selatan',
+  'Tangerang',
+  'Depok',
+  'Bogor',
+] as const;
+
+export const TRANSUM_TRANSPORT_MODES = ['LRT', 'LRT Jakarta', 'MRT', 'Transjakarta', 'Jaklingko'] as const;
+
 export const UI_COLORS = {
   primary: '#0F62FE',
   secondary: '#001D6C',

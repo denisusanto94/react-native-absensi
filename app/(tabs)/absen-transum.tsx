@@ -1,29 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SummaryCard } from '@/components/attendance/SummaryCard';
-import { LocationGateCard } from '@/components/attendance/LocationGateCard';
 import { SelfieCaptureSheet } from '@/components/SelfieCaptureSheet';
 import {
-  ALLOWED_RADIUS_METERS,
   Coordinates,
-  FALLBACK_OFFICE,
+  TRANSUM_DOMICILES,
+  TRANSUM_TRANSPORT_MODES,
   UI_COLORS,
 } from '@/constants/attendance';
 import { useAttendanceTransum } from '@/hooks/useAttendanceTransum';
 import { useAuth } from '@/hooks/useAuth';
-import { metersBetween } from '@/utils/geo';
 
 type PendingAction = {
   type: 'check-in' | 'check-out';
@@ -34,7 +23,6 @@ type PendingAction = {
 
 type LocationSnapshot = {
   coords: Coordinates & { accuracy?: number };
-  distance: number;
   label?: string;
   updatedAt: string;
 };
@@ -46,10 +34,6 @@ export default function AbsenTransumScreen() {
     activeRecord,
     checkIn,
     checkOut,
-    offices,
-    officesLoading,
-    selectedOffice,
-    refreshOffices,
     updateProfile,
   } = useAttendanceTransum();
   const { user } = useAuth();
@@ -58,9 +42,6 @@ export default function AbsenTransumScreen() {
   const [selfieSheetOpen, setSelfieSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const MAX_ALLOWED_ACCURACY = 75;
-
-  const officeForDisplay = selectedOffice ?? FALLBACK_OFFICE;
-  const allowedRadius = officeForDisplay.radius ?? ALLOWED_RADIUS_METERS;
 
   const fetchLocation = useCallback(async () => {
     const providerStatus = await Location.getProviderStatusAsync();
@@ -107,8 +88,6 @@ export default function AbsenTransumScreen() {
       return null;
     }
 
-    const distance = metersBetween(coords, officeForDisplay);
-
     let label: string | undefined;
     try {
       const [address] = await Location.reverseGeocodeAsync(position.coords);
@@ -121,23 +100,22 @@ export default function AbsenTransumScreen() {
 
     const snapshot: LocationSnapshot = {
       coords,
-      distance,
       label,
       updatedAt: new Date().toLocaleTimeString('id-ID'),
     };
 
     setLocationInfo(snapshot);
     return snapshot;
-  }, [officeForDisplay]);
+  }, []);
 
   const onRefreshLocation = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([fetchLocation(), refreshOffices()]);
+      await fetchLocation();
     } finally {
       setRefreshing(false);
     }
-  }, [fetchLocation, refreshOffices]);
+  }, [fetchLocation]);
 
   useEffect(() => {
     fetchLocation();
@@ -148,12 +126,16 @@ export default function AbsenTransumScreen() {
       Alert.alert('Profil belum siap', 'Silakan login ulang.');
       return false;
     }
-    if (!profile.officeId) {
-      Alert.alert('Pilih Kantor', 'Silakan pilih kantor yang tersedia.');
+    if (!profile.domicile) {
+      Alert.alert('Pilih domisili', 'Silakan pilih domisili terlebih dahulu.');
+      return false;
+    }
+    if (!profile.transportMode) {
+      Alert.alert('Pilih moda transportasi', 'Silakan pilih moda transportasi terlebih dahulu.');
       return false;
     }
     return true;
-  }, [profile.officeId, profile.userId]);
+  }, [profile.domicile, profile.transportMode, profile.userId]);
 
   const runAction = useCallback(
     async (type: 'check-in' | 'check-out') => {
@@ -167,14 +149,6 @@ export default function AbsenTransumScreen() {
         return;
       }
 
-      if (locationSnapshot.distance > allowedRadius) {
-        Alert.alert(
-          'Di luar zona',
-          `Kamu berada ${locationSnapshot.distance.toFixed(0)} m dari titik transum ${officeForDisplay.name}. Mendekatlah lalu coba lagi.`
-        );
-        return;
-      }
-
       setPendingAction({
         type,
         coords: locationSnapshot.coords,
@@ -183,7 +157,7 @@ export default function AbsenTransumScreen() {
       });
       setSelfieSheetOpen(true);
     },
-    [allowedRadius, ensureProfileReady, fetchLocation, officeForDisplay.name]
+    [ensureProfileReady, fetchLocation]
   );
 
   const handleSelfieCaptured = useCallback(
@@ -234,9 +208,15 @@ export default function AbsenTransumScreen() {
   const canCheckIn = useMemo(() => !activeRecord, [activeRecord]);
   const canCheckOut = useMemo(() => Boolean(activeRecord), [activeRecord]);
 
-  const handleSelectOffice = useCallback(
-    (officeId: number) => {
-      updateProfile({ officeId });
+  const handleSelectDomicile = useCallback(
+    (domicile: string) => {
+      updateProfile({ domicile });
+    },
+    [updateProfile]
+  );
+  const handleSelectTransportMode = useCallback(
+    (mode: string) => {
+      updateProfile({ transportMode: mode });
     },
     [updateProfile]
   );
@@ -266,50 +246,66 @@ export default function AbsenTransumScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Zona Transum</Text>
-          <Text style={styles.cardSubtitle}>Pilih titik transportasi umum yang tersedia.</Text>
-          <View style={styles.officeList}>
-            {officesLoading ? (
-              <View style={styles.loaderRow}>
-                <ActivityIndicator color={UI_COLORS.primary} />
-                <Text style={styles.helperText}>Memuat daftar titik...</Text>
-              </View>
-            ) : null}
-            {offices.map((office) => {
-              const active = office.id === profile.officeId;
+          <Text style={styles.cardTitle}>Domisili</Text>
+          <Text style={styles.cardSubtitle}>Pilih wilayah tempat tinggal kamu.</Text>
+          <View style={styles.optionGrid}>
+            {TRANSUM_DOMICILES.map((domicile) => {
+              const active = profile.domicile === domicile;
               return (
                 <Pressable
-                  key={office.id}
-                  style={[styles.officeCard, active && styles.officeCardActive]}
-                  onPress={() => handleSelectOffice(office.id)}
+                  key={domicile}
+                  style={[styles.optionPill, active && styles.optionPillActive]}
+                  onPress={() => handleSelectDomicile(domicile)}
                 >
-                  <Text style={styles.officeType}>{office.name}</Text>
-                  <Text style={styles.officeAddress}>{office.address}</Text>
-                  <Text style={styles.helperText}>Radius: {office.radius} m</Text>
+                  <Text style={[styles.optionText, active && styles.optionTextActive]}>{domicile}</Text>
                 </Pressable>
               );
             })}
-            {offices.length === 0 && !officesLoading ? (
-              <Text style={styles.emptyText}>Tidak ada data titik transum. Tarik untuk menyegarkan.</Text>
-            ) : null}
           </View>
-          <Pressable style={styles.refreshButton} onPress={refreshOffices}>
-            <Text style={styles.refreshText}>Segarkan titik transum</Text>
-          </Pressable>
         </View>
 
-        <LocationGateCard
-          distanceMeters={locationInfo?.distance ?? null}
-          allowedMeters={allowedRadius}
-          gpsLabel={locationInfo?.label}
-          lastUpdated={locationInfo?.updatedAt}
-          officeName={officeForDisplay.name}
-          officeAddress={officeForDisplay.address}
-          officeCoords={{
-            latitude: officeForDisplay.latitude,
-            longitude: officeForDisplay.longitude,
-          }}
-        />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Moda Transportasi</Text>
+          <Text style={styles.cardSubtitle}>Pilih moda utama yang kamu gunakan.</Text>
+          <View style={styles.optionGrid}>
+            {TRANSUM_TRANSPORT_MODES.map((mode) => {
+              const active = profile.transportMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  style={[styles.optionPill, active && styles.optionPillActive]}
+                  onPress={() => handleSelectTransportMode(mode)}
+                >
+                  <Text style={[styles.optionText, active && styles.optionTextActive]}>{mode}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Lokasi Terakhir</Text>
+          <Text style={styles.cardSubtitle}>
+            Data diambil dari GPS ketika kamu menyegarkan atau mengambil selfie.
+          </Text>
+          {locationInfo ? (
+            <View style={styles.locationInfo}>
+              <Text style={styles.helperText}>Diperbarui: {locationInfo.updatedAt}</Text>
+              <Text style={styles.locationValue}>
+                Koordinat: {locationInfo.coords.latitude.toFixed(5)},{' '}
+                {locationInfo.coords.longitude.toFixed(5)}
+              </Text>
+              <Text style={styles.locationValue}>
+                Akurasi: ±{locationInfo.coords.accuracy?.toFixed(0) ?? '0'} m
+              </Text>
+              {locationInfo.label ? (
+                <Text style={styles.locationValue}>Alamat: {locationInfo.label}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.helperText}>Belum ada lokasi. Tarik untuk memperbarui.</Text>
+          )}
+        </View>
 
         <View style={styles.sessionCard}>
           <Text style={styles.cardTitle}>Aktivitas Transum Hari Ini</Text>
@@ -409,46 +405,37 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: UI_COLORS.secondary,
   },
-  officeList: {
-    gap: 10,
-    marginTop: 4,
+  optionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
   },
-  officeCard: {
-    borderRadius: 18,
+  optionPill: {
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: '#E4E8F5',
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: '#F8FAFF',
   },
-  officeCardActive: {
+  optionPillActive: {
     borderColor: UI_COLORS.primary,
     backgroundColor: 'rgba(15, 98, 254, 0.08)',
   },
-  officeType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: UI_COLORS.secondary,
-  },
-  officeAddress: {
-    fontSize: 13,
+  optionText: {
     color: '#6B7280',
-    marginTop: 2,
+    fontWeight: '500',
   },
-  loaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  refreshButton: {
-    marginTop: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDE3F4',
-  },
-  refreshText: {
+  optionTextActive: {
     color: UI_COLORS.primary,
+  },
+  locationInfo: {
+    marginTop: 8,
+    gap: 6,
+  },
+  locationValue: {
+    color: UI_COLORS.secondary,
     fontWeight: '600',
   },
   sessionCard: {
@@ -509,9 +496,5 @@ const styles = StyleSheet.create({
   actionHint: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 12,
-  },
-  emptyText: {
-    color: '#7A849C',
-    marginTop: 4,
   },
 });

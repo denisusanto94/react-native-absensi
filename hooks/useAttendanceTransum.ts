@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   ATTENDANCE_TRANSUM_STORAGE_KEYS,
-  FALLBACK_OFFICE,
+  TRANSUM_DOMICILES,
+  TRANSUM_TRANSPORT_MODES,
   type Coordinates,
-  type Office,
 } from '@/constants/attendance';
 import { useAuth } from '@/hooks/useAuth';
 import type { AttendanceProfile, AttendanceRecord } from '@/types/attendance';
-import { api, type OfficeResponse } from '@/utils/api';
+import { api } from '@/utils/api';
 
 const generateId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -18,14 +18,8 @@ export type CheckPayload = {
   selfieUri: string;
 };
 
-const mapOffice = (office: OfficeResponse): Office => ({
-  id: office.id,
-  name: office.office_name,
-  latitude: Number(office.latitude),
-  longitude: Number(office.longitude),
-  radius: Number(office.radius_meter),
-  address: office.address,
-});
+const DEFAULT_DOMICILE = TRANSUM_DOMICILES[0];
+const DEFAULT_TRANSPORT = TRANSUM_TRANSPORT_MODES[0];
 
 export const useAttendanceTransum = () => {
   const { user, token } = useAuth();
@@ -34,10 +28,10 @@ export const useAttendanceTransum = () => {
     name: user?.email ?? 'Pengguna',
     userId: user?.id ?? null,
     officeId: null,
+    domicile: DEFAULT_DOMICILE,
+    transportMode: DEFAULT_TRANSPORT,
   });
   const [loading, setLoading] = useState(true);
-  const [offices, setOffices] = useState<Office[]>([]);
-  const [officesLoading, setOfficesLoading] = useState(false);
 
   useEffect(() => {
     const hydrate = async () => {
@@ -55,6 +49,8 @@ export const useAttendanceTransum = () => {
           setProfile((prev) => ({
             ...prev,
             officeId: parsed.officeId ?? null,
+            domicile: parsed.domicile ?? DEFAULT_DOMICILE,
+            transportMode: parsed.transportMode ?? DEFAULT_TRANSPORT,
           }));
         }
       } catch (error) {
@@ -95,35 +91,6 @@ export const useAttendanceTransum = () => {
     );
   }, [loading, profile]);
 
-  const refreshOffices = useCallback(async () => {
-    if (!token) {
-      setOffices([]);
-      setProfile((prev) => ({
-        ...prev,
-        officeId: null,
-      }));
-      return;
-    }
-    setOfficesLoading(true);
-    try {
-      const response = await api.getOffices(token);
-      const mapped = response.map(mapOffice);
-      setOffices(mapped);
-      setProfile((prev) => ({
-        ...prev,
-        officeId: prev.officeId ?? mapped[0]?.id ?? null,
-      }));
-    } catch (error) {
-      console.warn('Gagal memuat daftar kantor transum', error);
-    } finally {
-      setOfficesLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    refreshOffices();
-  }, [refreshOffices]);
-
   const updateProfile = useCallback((patch: Partial<AttendanceProfile>) => {
     setProfile((prev) => ({
       ...prev,
@@ -133,19 +100,14 @@ export const useAttendanceTransum = () => {
 
   const activeRecord = useMemo(() => records.find((record) => !record.checkOut), [records]);
 
-  const selectedOffice = useMemo(
-    () => offices.find((office) => office.id === profile.officeId) ?? null,
-    [offices, profile.officeId]
-  );
-
   const ensureAuthReady = useCallback(() => {
     if (!token || !user?.id) {
       throw new Error('Sesi login kedaluwarsa, silakan masuk kembali.');
     }
-    if (!profile.officeId) {
-      throw new Error('Pilih kantor terlebih dahulu.');
+    if (!profile.domicile || !profile.transportMode) {
+      throw new Error('Pilih domisili dan moda transportasi terlebih dahulu.');
     }
-  }, [profile.officeId, token, user?.id]);
+  }, [profile.domicile, profile.transportMode, token, user?.id]);
 
   const checkIn = useCallback(
     async ({ coordinates, selfieUri }: CheckPayload) => {
@@ -157,10 +119,24 @@ export const useAttendanceTransum = () => {
         throw new Error('Sesi login tidak valid.');
       }
 
-      await api.checkInTransum(token, {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-      });
+      const checkInTimestamp = new Date().toISOString();
+      const checkInPayload = {
+        user_id: user.id,
+        check_in: checkInTimestamp,
+        check_in_lat: String(coordinates.latitude),
+        check_in_long: String(coordinates.longitude),
+        check_out: null,
+        check_out_lat: null,
+        check_out_long: null,
+        type_transum: profile.transportMode ?? DEFAULT_TRANSPORT,
+        city: profile.domicile ?? DEFAULT_DOMICILE,
+      };
+
+      const creation = await api.createTransumAttendance(token, checkInPayload);
+      const remoteId = creation.id;
+      if (!remoteId) {
+        throw new Error('Gagal membuat sesi transum di server.');
+      }
 
       if (selfieUri) {
         try {
@@ -174,21 +150,24 @@ export const useAttendanceTransum = () => {
         }
       }
 
-      const officeSnapshot = selectedOffice ?? FALLBACK_OFFICE;
       const newRecord: AttendanceRecord = {
         id: generateId(),
         name: user.email,
         userId: user.id,
-        officeId: officeSnapshot.id,
-        officeName: officeSnapshot.name,
-        checkIn: new Date().toISOString(),
+        officeId: null,
+        officeName: checkInPayload.city ?? undefined,
+        checkIn: checkInTimestamp,
         checkInLocation: coordinates,
         checkInSelfieUri: selfieUri,
+        remoteTransumId: remoteId,
+        typeTransum: checkInPayload.type_transum,
+        city: checkInPayload.city,
+        source: 'transum',
       };
 
       setRecords((prev) => [newRecord, ...prev]);
     },
-    [activeRecord, ensureAuthReady, selectedOffice, token, user]
+    [activeRecord, ensureAuthReady, profile.domicile, profile.transportMode, token, user]
   );
 
   const checkOut = useCallback(
@@ -201,9 +180,27 @@ export const useAttendanceTransum = () => {
         throw new Error('Sesi login tidak valid.');
       }
 
-      await api.checkOutTransum(token, {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
+      const remoteId = activeRecord.remoteTransumId;
+      if (!remoteId) {
+        throw new Error('Sesi transum tidak ditemukan. Silakan check-in ulang.');
+      }
+
+      const checkOutTimestamp = new Date().toISOString();
+      const activeCheckInLat = activeRecord.checkInLocation.latitude;
+      const activeCheckInLong = activeRecord.checkInLocation.longitude;
+      const typeTransum = activeRecord.typeTransum ?? profile.transportMode ?? DEFAULT_TRANSPORT;
+      const city = activeRecord.city ?? profile.domicile ?? DEFAULT_DOMICILE;
+
+      await api.updateTransumAttendance(token, remoteId, {
+        user_id: user.id,
+        check_in: activeRecord.checkIn,
+        check_in_lat: String(activeCheckInLat),
+        check_in_long: String(activeCheckInLong),
+        check_out: checkOutTimestamp,
+        check_out_lat: String(coordinates.latitude),
+        check_out_long: String(coordinates.longitude),
+        type_transum: typeTransum,
+        city,
       });
 
       if (selfieUri) {
@@ -218,7 +215,6 @@ export const useAttendanceTransum = () => {
         }
       }
 
-      const checkOutTimestamp = new Date().toISOString();
       const targetId = activeRecord.id;
       setRecords((prev) =>
         prev.map((record) =>
@@ -228,12 +224,14 @@ export const useAttendanceTransum = () => {
                 checkOut: checkOutTimestamp,
                 checkOutLocation: coordinates,
                 checkOutSelfieUri: selfieUri,
+                typeTransum,
+                city,
               }
             : record
         )
       );
     },
-    [activeRecord, ensureAuthReady, token, user]
+    [activeRecord, ensureAuthReady, profile.domicile, profile.transportMode, token, user]
   );
 
   const todayKey = new Date().toDateString();
@@ -258,12 +256,8 @@ export const useAttendanceTransum = () => {
     records,
     profile,
     loading,
-    offices,
-    officesLoading,
-    selectedOffice,
     activeRecord,
     summary,
-    refreshOffices,
     updateProfile,
     checkIn,
     checkOut,

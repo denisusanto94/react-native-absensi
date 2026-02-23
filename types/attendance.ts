@@ -12,10 +12,16 @@ export type AttendanceRecord = {
   checkOutLocation?: Coordinates & { accuracy?: number };
   checkInSelfieUri?: string;
   checkOutSelfieUri?: string;
+  remoteTransumId?: number | null;
+  typeTransum?: string | null;
+  city?: string | null;
+  source?: 'regular' | 'transum';
 };
 
 export type AttendanceProfile = {
   name: string;
   userId: number | null;
   officeId: number | null;
+  domicile?: string | null;
+  transportMode?: string | null;
 };

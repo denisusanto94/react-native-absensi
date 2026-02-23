@@ -40,6 +40,8 @@ export const useAttendance = () => {
     name: user?.email ?? 'Pengguna',
     userId: user?.id ?? null,
     officeId: null,
+    domicile: null,
+    transportMode: null,
   });
   const [loading, setLoading] = useState(true);
   const [offices, setOffices] = useState<Office[]>([]);
@@ -62,6 +64,8 @@ export const useAttendance = () => {
           setProfile((prev) => ({
             ...prev,
             officeId: parsed.officeId ?? null,
+            domicile: parsed.domicile ?? null,
+            transportMode: parsed.transportMode ?? null,
           }));
         }
       } catch (error) {

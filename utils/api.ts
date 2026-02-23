@@ -117,6 +117,25 @@ export type AttendancePhotoResponse = {
   attendance_transum_id?: number;
 };
 
+export type TransumAttendancePayload = {
+  user_id: number;
+  check_in?: string | null;
+  check_in_lat?: string | null;
+  check_in_long?: string | null;
+  check_in_photo?: string | null;
+  check_out?: string | null;
+  check_out_lat?: string | null;
+  check_out_long?: string | null;
+  check_out_photo?: string | null;
+  type_transum: string;
+  city: string;
+};
+
+export type TransumAttendanceResponse = {
+  message?: string;
+  id?: number;
+};
+
 const authHeaders = (token?: string) =>
   token
     ? {
@@ -209,8 +228,8 @@ export const api = {
       },
       body: JSON.stringify(payload),
     }),
-  checkInTransum: (token: string, payload: CoordinatesPayload) =>
-    request<{ message?: string }>("/attendance-transum/checkin", {
+  createTransumAttendance: (token: string, payload: TransumAttendancePayload) =>
+    request<TransumAttendanceResponse>("/attendance-transum", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -218,9 +237,9 @@ export const api = {
       },
       body: JSON.stringify(payload),
     }),
-  checkOutTransum: (token: string, payload: CoordinatesPayload) =>
-    request<{ message?: string }>("/attendance-transum/checkout", {
-      method: "POST",
+  updateTransumAttendance: (token: string, attendanceId: number, payload: TransumAttendancePayload) =>
+    request<{ message?: string }>(`/attendance-transum/${attendanceId}`, {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
         ...(authHeaders(token) ?? {}),
