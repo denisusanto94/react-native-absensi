@@ -169,6 +169,18 @@ export const useAttendance = () => {
         longitude: coordinates.longitude,
       });
 
+      if (selfieUri) {
+        try {
+          await api.uploadAttendancePhotoCheckIn(token, selfieUri);
+        } catch (error) {
+          throw new Error(
+            error instanceof Error
+              ? `Upload foto check-in gagal: ${error.message}`
+              : 'Upload foto check-in gagal.'
+          );
+        }
+      }
+
       const officeSnapshot = selectedOffice ?? FALLBACK_OFFICE;
       const newRecord: AttendanceRecord = {
         id: generateId(),
@@ -200,6 +212,18 @@ export const useAttendance = () => {
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
       });
+
+      if (selfieUri) {
+        try {
+          await api.uploadAttendancePhotoCheckOut(token, selfieUri);
+        } catch (error) {
+          throw new Error(
+            error instanceof Error
+              ? `Upload foto check-out gagal: ${error.message}`
+              : 'Upload foto check-out gagal.'
+          );
+        }
+      }
 
       const checkOutTimestamp = new Date().toISOString();
       const targetId = activeRecord.id;

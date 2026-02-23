@@ -110,12 +110,52 @@ export type LeaveRequestPayload = {
   reason: string;
 };
 
+export type AttendancePhotoResponse = {
+  message?: string;
+  filename?: string;
+  attendance_id?: number;
+};
+
 const authHeaders = (token?: string) =>
   token
     ? {
         Authorization: `Bearer ${token}`,
       }
     : undefined;
+
+const getFileExtension = (uri: string) => {
+  const cleanUri = uri.split("?")[0];
+  const match = cleanUri.match(/\.([a-z0-9]+)$/i);
+  if (match?.[1]) {
+    return match[1].toLowerCase();
+  }
+  return "jpg";
+};
+
+const resolveMimeType = (extension: string) => {
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    default:
+      return "image/jpeg";
+  }
+};
+
+const buildPhotoFormData = (uri: string) => {
+  const extension = getFileExtension(uri);
+  const formData = new FormData();
+  formData.append(
+    "foto",
+    {
+      uri,
+      name: `selfie_${Date.now()}.${extension}`,
+      type: resolveMimeType(extension),
+    } as any
+  );
+  return formData;
+};
 
 export const api = {
   loginUser: (email: string, password: string) =>
@@ -199,5 +239,21 @@ export const api = {
       headers: {
         ...(authHeaders(token) ?? {}),
       },
+    }),
+  uploadAttendancePhotoCheckIn: (token: string, uri: string) =>
+    request<AttendancePhotoResponse>("/attendance-foto/checkin", {
+      method: "POST",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
+      body: buildPhotoFormData(uri),
+    }),
+  uploadAttendancePhotoCheckOut: (token: string, uri: string) =>
+    request<AttendancePhotoResponse>("/attendance-foto/checkout", {
+      method: "POST",
+      headers: {
+        ...(authHeaders(token) ?? {}),
+      },
+      body: buildPhotoFormData(uri),
     }),
 };
