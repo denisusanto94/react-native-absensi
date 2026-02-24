@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -36,12 +46,22 @@ export default function AbsenTransumScreen() {
     checkOut,
     updateProfile,
   } = useAttendanceTransum();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [locationInfo, setLocationInfo] = useState<LocationSnapshot | null>(null);
   const [selfieSheetOpen, setSelfieSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const MAX_ALLOWED_ACCURACY = 75;
+
+  const warnMockLocationDetected = useCallback(async () => {
+    const warning =
+      'Lokasi palsu terdeteksi. Matikan aplikasi spoofing / mock location sebelum melakukan absensi transum. Kamu otomatis keluar.';
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravity(warning, ToastAndroid.LONG, ToastAndroid.CENTER);
+    }
+    Alert.alert('Lokasi palsu terdeteksi', warning);
+    await logout();
+  }, [logout]);
 
   const fetchLocation = useCallback(async () => {
     const providerStatus = await Location.getProviderStatusAsync();
@@ -67,10 +87,7 @@ export default function AbsenTransumScreen() {
     });
 
     if (position.mocked) {
-      Alert.alert(
-        'Lokasi palsu terdeteksi',
-        'Matikan aplikasi spoofing / mock location sebelum melakukan absensi transum.'
-      );
+      await warnMockLocationDetected();
       return null;
     }
 
@@ -106,7 +123,7 @@ export default function AbsenTransumScreen() {
 
     setLocationInfo(snapshot);
     return snapshot;
-  }, []);
+  }, [warnMockLocationDetected]);
 
   const onRefreshLocation = useCallback(async () => {
     setRefreshing(true);

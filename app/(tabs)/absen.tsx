@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  ToastAndroid,
   View,
 } from 'react-native';
 import * as Location from 'expo-location';
@@ -52,7 +54,7 @@ export default function AbsenScreen() {
     selectedOffice,
     refreshOffices,
   } = useAttendance();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [locationInfo, setLocationInfo] = useState<LocationSnapshot | null>(null);
   const [selfieSheetOpen, setSelfieSheetOpen] = useState(false);
@@ -61,6 +63,16 @@ export default function AbsenScreen() {
 
   const officeForDisplay = selectedOffice ?? FALLBACK_OFFICE;
   const allowedRadius = officeForDisplay.radius ?? ALLOWED_RADIUS_METERS;
+
+  const warnMockLocationDetected = useCallback(async () => {
+    const warning =
+      'Lokasi palsu terdeteksi. Matikan aplikasi spoofing / mock location sebelum melakukan absensi. Kamu otomatis keluar.';
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravity(warning, ToastAndroid.LONG, ToastAndroid.CENTER);
+    }
+    Alert.alert('Lokasi palsu terdeteksi', warning);
+    await logout();
+  }, [logout]);
 
   const fetchLocation = useCallback(async () => {
     const providerStatus = await Location.getProviderStatusAsync();
@@ -86,10 +98,7 @@ export default function AbsenScreen() {
     });
 
     if (position.mocked) {
-      Alert.alert(
-        'Lokasi palsu terdeteksi',
-        'Matikan aplikasi spoofing / mock location sebelum melakukan absensi.'
-      );
+      await warnMockLocationDetected();
       return null;
     }
 
@@ -128,7 +137,7 @@ export default function AbsenScreen() {
 
     setLocationInfo(snapshot);
     return snapshot;
-  }, [officeForDisplay]);
+  }, [officeForDisplay, warnMockLocationDetected]);
 
   const onRefreshLocation = useCallback(async () => {
     setRefreshing(true);

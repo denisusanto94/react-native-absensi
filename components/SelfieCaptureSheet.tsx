@@ -12,6 +12,7 @@ import {
 import {
   CameraView,
   useCameraPermissions,
+  useMicrophonePermissions,
   type CameraMountError,
 } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,6 +43,7 @@ export const SelfieCaptureSheet = ({
   watermark,
 }: Props) => {
   const [permission, requestPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const isExpoGo = Constants.appOwnership === "expo";
   const [mediaPermission, setMediaPermission] =
     useState<MediaLibrary.PermissionResponse | null>(null);
@@ -52,6 +54,7 @@ export const SelfieCaptureSheet = ({
   const [cameraKey, setCameraKey] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [microphonePrompted, setMicrophonePrompted] = useState(false);
 
   const resetCameraSession = useCallback(() => {
     setCameraReady(false);
@@ -64,6 +67,7 @@ export const SelfieCaptureSheet = ({
       setPreviewUri(null);
       setCapturing(false);
       resetCameraSession();
+      setMicrophonePrompted(false);
       return;
     }
 
@@ -80,6 +84,27 @@ export const SelfieCaptureSheet = ({
   }, [permission, requestPermission, resetCameraSession, visible]);
 
   useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    if (microphonePrompted) {
+      return;
+    }
+    if (
+      !microphonePermission ||
+      (!microphonePermission.granted && microphonePermission.canAskAgain)
+    ) {
+      requestMicrophonePermission();
+      setMicrophonePrompted(true);
+    }
+  }, [
+    microphonePermission,
+    microphonePrompted,
+    requestMicrophonePermission,
+    visible,
+  ]);
+
+  useEffect(() => {
     if (!visible || isExpoGo) {
       return;
     }
@@ -87,6 +112,18 @@ export const SelfieCaptureSheet = ({
       .then((status) => setMediaPermission(status))
       .catch((error) => console.warn("Gagal memeriksa izin media", error));
   }, [isExpoGo, visible]);
+
+  useEffect(() => {
+    if (!visible || !permission?.granted || cameraReady || cameraError) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      setCameraError(
+        "Kamera tidak merespons. Tutup aplikasi lain yang memakai kamera lalu coba lagi."
+      );
+    }, 8000);
+    return () => clearTimeout(timeout);
+  }, [cameraError, cameraReady, permission?.granted, visible]);
 
   const takeSelfie = useCallback(async () => {
     if (!cameraRef.current || !cameraReady) {
@@ -207,8 +244,15 @@ export const SelfieCaptureSheet = ({
     ) : null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <View style={styles.container}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      hardwareAccelerated
+    >
+      {visible ? (
+        <View style={styles.container}>
         <View style={styles.header}>
           <Pressable hitSlop={16} onPress={onDismiss}>
             <Ionicons name="close" size={24} color={UI_COLORS.secondary} />
@@ -252,6 +296,7 @@ export const SelfieCaptureSheet = ({
               style={StyleSheet.absoluteFill}
               facing="front"
               enableTorch={false}
+              mode="picture"
               active={visible && !previewUri}
               onCameraReady={() => setCameraReady(true)}
               onMountError={handleCameraError}
@@ -304,7 +349,8 @@ export const SelfieCaptureSheet = ({
             </Text>
           )}
         </View>
-      </View>
+        </View>
+      ) : null}
     </Modal>
   );
 };

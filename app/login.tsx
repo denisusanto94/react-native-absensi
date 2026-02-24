@@ -13,9 +13,16 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { Ionicons } from '@expo/vector-icons';
 
 import { UI_COLORS } from '@/constants/attendance';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  areMandatoryPermissionsGranted,
+  checkMandatoryPermissions,
+  requestMandatoryPermissions,
+  type MandatoryPermissionStatus,
+} from '@/utils/permissions';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -26,10 +33,27 @@ export default function LoginScreen() {
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [checkingBiometric, setCheckingBiometric] = useState(true);
   const [biometricLoading, setBiometricLoading] = useState(false);
+  const [permissionStatuses, setPermissionStatuses] = useState<MandatoryPermissionStatus[] | null>(null);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [requestingPermissions, setRequestingPermissions] = useState(false);
 
   const isBusy = submitting || status === 'loading';
-  const canSubmit = useMemo(() => email.length > 0 && password.length >= 6 && !isBusy, [email.length, isBusy, password.length]);
-  const showBiometricLogin = biometricEnabled && biometricReady && biometricSupported && !checkingBiometric;
+  const permissionsGranted = useMemo(
+    () => (permissionStatuses ? areMandatoryPermissionsGranted(permissionStatuses) : false),
+    [permissionStatuses]
+  );
+  const canSubmit = useMemo(
+    () =>
+      email.length > 0 &&
+      password.length >= 6 &&
+      !isBusy &&
+      permissionsGranted &&
+      !permissionsLoading &&
+      !requestingPermissions,
+    [email.length, isBusy, password.length, permissionsGranted, permissionsLoading, requestingPermissions]
+  );
+  const showBiometricLogin =
+    biometricEnabled && biometricReady && biometricSupported && !checkingBiometric && permissionsGranted;
 
   useEffect(() => {
     let cancelled = false;
@@ -58,10 +82,59 @@ export default function LoginScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const hydratePermissions = async () => {
+      try {
+        const statuses = await checkMandatoryPermissions();
+        if (!cancelled) {
+          setPermissionStatuses(statuses);
+        }
+      } finally {
+        if (!cancelled) {
+          setPermissionsLoading(false);
+        }
+      }
+    };
+
+    hydratePermissions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const validatePermissionsBeforeLogin = useCallback(async () => {
+    const statuses = await checkMandatoryPermissions();
+    setPermissionStatuses(statuses);
+    const granted = areMandatoryPermissionsGranted(statuses);
+    if (!granted) {
+      Alert.alert(
+        'Izin aplikasi wajib',
+        'Aktifkan akses lokasi, kamera, mikrofon, galeri, dan telepon sebelum login.'
+      );
+    }
+    return granted;
+  }, []);
+
+  const handleRequestPermissions = useCallback(async () => {
+    setRequestingPermissions(true);
+    try {
+      const statuses = await requestMandatoryPermissions();
+      setPermissionStatuses(statuses);
+    } finally {
+      setRequestingPermissions(false);
+      setPermissionsLoading(false);
+    }
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
+      const latestGranted = await validatePermissionsBeforeLogin();
+      if (!latestGranted) {
+        return;
+      }
       await login({ email, password });
       router.replace('/(tabs)');
     } catch (error) {
@@ -69,11 +142,15 @@ export default function LoginScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [canSubmit, email, login, password, router]);
+  }, [canSubmit, email, login, password, router, validatePermissionsBeforeLogin]);
 
   const handleBiometricLogin = useCallback(async () => {
     setBiometricLoading(true);
     try {
+      const latestGranted = await validatePermissionsBeforeLogin();
+      if (!latestGranted) {
+        return;
+      }
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Login dengan biometrik',
         fallbackLabel: 'Masukkan kata sandi',
@@ -89,7 +166,7 @@ export default function LoginScreen() {
     } finally {
       setBiometricLoading(false);
     }
-  }, [restoreBiometricSession, router]);
+  }, [restoreBiometricSession, router, validatePermissionsBeforeLogin]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -149,6 +226,67 @@ export default function LoginScreen() {
               )}
             </Pressable>
           ) : null}
+
+          <View style={styles.permissionCard}>
+            <View style={styles.permissionHeader}>
+              <Text style={styles.permissionTitle}>Izin Aplikasi</Text>
+              <Text style={[styles.permissionStatusText, permissionsGranted && styles.permissionStatusSuccess]}>
+                {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan semua izin untuk melanjutkan.'}
+              </Text>
+            </View>
+            {permissionsLoading ? (
+              <View style={styles.permissionLoadingRow}>
+                <ActivityIndicator color={UI_COLORS.secondary} />
+                <Text style={styles.permissionLoadingText}>Memeriksa izin perangkat...</Text>
+              </View>
+            ) : (
+              <View style={styles.permissionList}>
+                {(permissionStatuses ?? []).map((status) => (
+                  <View key={status.key} style={styles.permissionRow}>
+                    <Ionicons
+                      name={status.granted ? 'checkmark-circle' : 'alert-circle'}
+                      size={18}
+                      color={status.granted ? '#16A34A' : '#DC2626'}
+                    />
+                    <Text style={styles.permissionLabel}>
+                      {status.label}
+                      {status.platform === 'android' ? ' (Android)' : ''}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.permissionValue,
+                        status.granted ? styles.permissionGranted : styles.permissionDenied,
+                      ]}
+                    >
+                      {status.granted ? 'Diizinkan' : 'Ditolak'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Pressable
+              style={[
+                styles.permissionButton,
+                permissionsGranted && styles.permissionButtonSuccess,
+                requestingPermissions && styles.buttonDisabled,
+              ]}
+              onPress={handleRequestPermissions}
+              disabled={requestingPermissions}
+            >
+              {requestingPermissions ? (
+                <ActivityIndicator color={permissionsGranted ? UI_COLORS.secondary : '#fff'} />
+              ) : (
+                <Text
+                  style={[
+                    styles.permissionButtonText,
+                    permissionsGranted && styles.permissionButtonSuccessText,
+                  ]}
+                >
+                  {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan izin sekarang'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -223,5 +361,80 @@ const styles = StyleSheet.create({
     color: UI_COLORS.secondary,
     fontSize: 16,
     fontWeight: '600',
+  },
+  permissionCard: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  permissionHeader: {
+    gap: 4,
+  },
+  permissionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: UI_COLORS.secondary,
+  },
+  permissionStatusText: {
+    fontSize: 13,
+    color: '#DC2626',
+  },
+  permissionStatusSuccess: {
+    color: '#16A34A',
+  },
+  permissionLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  permissionLoadingText: {
+    color: '#6B7280',
+    fontSize: 13,
+  },
+  permissionList: {
+    gap: 8,
+  },
+  permissionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  permissionLabel: {
+    flex: 1,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  permissionValue: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  permissionGranted: {
+    color: '#16A34A',
+  },
+  permissionDenied: {
+    color: '#DC2626',
+  },
+  permissionButton: {
+    marginTop: 4,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: UI_COLORS.primary,
+  },
+  permissionButtonSuccess: {
+    backgroundColor: 'rgba(15, 98, 254, 0.08)',
+    borderColor: UI_COLORS.primary,
+    borderWidth: 1,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  permissionButtonSuccessText: {
+    color: UI_COLORS.primary,
   },
 });
