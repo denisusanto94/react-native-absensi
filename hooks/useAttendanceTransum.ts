@@ -185,9 +185,14 @@ export const useAttendanceTransum = () => {
         throw new Error('Sesi transum tidak ditemukan. Silakan check-in ulang.');
       }
 
+      const checkInLocation = activeRecord.checkInLocation;
+      if (!checkInLocation) {
+        throw new Error('Data lokasi check-in tidak ditemukan. Silakan lakukan check-in ulang sebelum check-out.');
+      }
+
       const checkOutTimestamp = new Date().toISOString();
-      const activeCheckInLat = activeRecord.checkInLocation.latitude;
-      const activeCheckInLong = activeRecord.checkInLocation.longitude;
+      const activeCheckInLat = checkInLocation.latitude;
+      const activeCheckInLong = checkInLocation.longitude;
       const typeTransum = activeRecord.typeTransum ?? profile.transportMode ?? DEFAULT_TRANSPORT;
       const city = activeRecord.city ?? profile.domicile ?? DEFAULT_DOMICILE;
 

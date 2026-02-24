@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LoadingOverlayProvider } from '@/hooks/useLoadingOverlay';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const unstable_settings = {
@@ -29,9 +30,11 @@ const RootNavigator = () => {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <LoadingOverlayProvider>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </LoadingOverlayProvider>
     </SafeAreaProvider>
   );
 }

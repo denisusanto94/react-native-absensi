@@ -23,6 +23,8 @@ import {
 } from '@/constants/attendance';
 import { useAttendanceTransum } from '@/hooks/useAttendanceTransum';
 import { useAuth } from '@/hooks/useAuth';
+import { useLoadingOverlay } from '@/hooks/useLoadingOverlay';
+import { animateLayoutTransition } from '@/utils/animation';
 
 type PendingAction = {
   type: 'check-in' | 'check-out';
@@ -47,6 +49,7 @@ export default function AbsenTransumScreen() {
     updateProfile,
   } = useAttendanceTransum();
   const { user, logout } = useAuth();
+  const { withLoading } = useLoadingOverlay();
   const [refreshing, setRefreshing] = useState(false);
   const [locationInfo, setLocationInfo] = useState<LocationSnapshot | null>(null);
   const [selfieSheetOpen, setSelfieSheetOpen] = useState(false);
@@ -121,6 +124,7 @@ export default function AbsenTransumScreen() {
       updatedAt: new Date().toLocaleTimeString('id-ID'),
     };
 
+    animateLayoutTransition();
     setLocationInfo(snapshot);
     return snapshot;
   }, [warnMockLocationDetected]);
@@ -166,6 +170,7 @@ export default function AbsenTransumScreen() {
         return;
       }
 
+      animateLayoutTransition();
       setPendingAction({
         type,
         coords: locationSnapshot.coords,
@@ -184,18 +189,29 @@ export default function AbsenTransumScreen() {
         return;
       }
 
+      const action = pendingAction.type;
+      const coords = pendingAction.coords;
+      const loadingMessage =
+        action === 'check-in' ? 'Mengirim check-in transum...' : 'Mengirim check-out transum...';
+
       try {
-        if (pendingAction.type === 'check-in') {
-          await checkIn({
-            coordinates: pendingAction.coords,
-            selfieUri,
-          });
+        await withLoading(async () => {
+          if (action === 'check-in') {
+            await checkIn({
+              coordinates: coords,
+              selfieUri,
+            });
+          } else {
+            await checkOut({
+              coordinates: coords,
+              selfieUri,
+            });
+          }
+        }, loadingMessage);
+
+        if (action === 'check-in') {
           Alert.alert('Check-in transum berhasil', 'Selamat menjalankan hari Rabu tanpa macet!');
         } else {
-          await checkOut({
-            coordinates: pendingAction.coords,
-            selfieUri,
-          });
           Alert.alert('Check-out transum berhasil', 'Terima kasih sudah mengikuti program.');
         }
       } catch (error) {
@@ -205,7 +221,7 @@ export default function AbsenTransumScreen() {
         setSelfieSheetOpen(false);
       }
     },
-    [checkIn, checkOut, pendingAction]
+    [checkIn, checkOut, pendingAction, withLoading]
   );
 
   const todaysSession = summary.todaysRecords[0];
@@ -227,12 +243,14 @@ export default function AbsenTransumScreen() {
 
   const handleSelectDomicile = useCallback(
     (domicile: string) => {
+      animateLayoutTransition();
       updateProfile({ domicile });
     },
     [updateProfile]
   );
   const handleSelectTransportMode = useCallback(
     (mode: string) => {
+      animateLayoutTransition();
       updateProfile({ transportMode: mode });
     },
     [updateProfile]

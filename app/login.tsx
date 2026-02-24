@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { UI_COLORS } from '@/constants/attendance';
 import { useAuth } from '@/hooks/useAuth';
+import { useLoadingOverlay } from '@/hooks/useLoadingOverlay';
 import {
   areMandatoryPermissionsGranted,
   checkMandatoryPermissions,
@@ -27,6 +28,7 @@ import {
 export default function LoginScreen() {
   const router = useRouter();
   const { login, status, biometricEnabled, biometricReady, restoreBiometricSession } = useAuth();
+  const { withLoading } = useLoadingOverlay();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -131,42 +133,46 @@ export default function LoginScreen() {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const latestGranted = await validatePermissionsBeforeLogin();
-      if (!latestGranted) {
-        return;
-      }
-      await login({ email, password });
-      router.replace('/(tabs)');
+      await withLoading(async () => {
+        const latestGranted = await validatePermissionsBeforeLogin();
+        if (!latestGranted) {
+          return;
+        }
+        await login({ email, password });
+        router.replace('/(tabs)');
+      }, 'Memproses login...');
     } catch (error) {
       Alert.alert('Login gagal', error instanceof Error ? error.message : String(error));
     } finally {
       setSubmitting(false);
     }
-  }, [canSubmit, email, login, password, router, validatePermissionsBeforeLogin]);
+  }, [canSubmit, email, login, password, router, validatePermissionsBeforeLogin, withLoading]);
 
   const handleBiometricLogin = useCallback(async () => {
     setBiometricLoading(true);
     try {
-      const latestGranted = await validatePermissionsBeforeLogin();
-      if (!latestGranted) {
-        return;
-      }
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Login dengan biometrik',
-        fallbackLabel: 'Masukkan kata sandi',
-        cancelLabel: 'Batal',
-      });
-      if (!result.success) {
-        return;
-      }
-      await restoreBiometricSession();
-      router.replace('/(tabs)');
+      await withLoading(async () => {
+        const latestGranted = await validatePermissionsBeforeLogin();
+        if (!latestGranted) {
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Login dengan biometrik',
+          fallbackLabel: 'Masukkan kata sandi',
+          cancelLabel: 'Batal',
+        });
+        if (!result.success) {
+          return;
+        }
+        await restoreBiometricSession();
+        router.replace('/(tabs)');
+      }, 'Menyiapkan autentikasi...');
     } catch (error) {
       Alert.alert('Biometrik gagal', error instanceof Error ? error.message : String(error));
     } finally {
       setBiometricLoading(false);
     }
-  }, [restoreBiometricSession, router, validatePermissionsBeforeLogin]);
+  }, [restoreBiometricSession, router, validatePermissionsBeforeLogin, withLoading]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -227,66 +233,68 @@ export default function LoginScreen() {
             </Pressable>
           ) : null}
 
-          <View style={styles.permissionCard}>
-            <View style={styles.permissionHeader}>
-              <Text style={styles.permissionTitle}>Izin Aplikasi</Text>
-              <Text style={[styles.permissionStatusText, permissionsGranted && styles.permissionStatusSuccess]}>
-                {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan semua izin untuk melanjutkan.'}
-              </Text>
-            </View>
-            {permissionsLoading ? (
-              <View style={styles.permissionLoadingRow}>
-                <ActivityIndicator color={UI_COLORS.secondary} />
-                <Text style={styles.permissionLoadingText}>Memeriksa izin perangkat...</Text>
-              </View>
-            ) : (
-              <View style={styles.permissionList}>
-                {(permissionStatuses ?? []).map((status) => (
-                  <View key={status.key} style={styles.permissionRow}>
-                    <Ionicons
-                      name={status.granted ? 'checkmark-circle' : 'alert-circle'}
-                      size={18}
-                      color={status.granted ? '#16A34A' : '#DC2626'}
-                    />
-                    <Text style={styles.permissionLabel}>
-                      {status.label}
-                      {status.platform === 'android' ? ' (Android)' : ''}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.permissionValue,
-                        status.granted ? styles.permissionGranted : styles.permissionDenied,
-                      ]}
-                    >
-                      {status.granted ? 'Diizinkan' : 'Ditolak'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            <Pressable
-              style={[
-                styles.permissionButton,
-                permissionsGranted && styles.permissionButtonSuccess,
-                requestingPermissions && styles.buttonDisabled,
-              ]}
-              onPress={handleRequestPermissions}
-              disabled={requestingPermissions}
-            >
-              {requestingPermissions ? (
-                <ActivityIndicator color={permissionsGranted ? UI_COLORS.secondary : '#fff'} />
-              ) : (
-                <Text
-                  style={[
-                    styles.permissionButtonText,
-                    permissionsGranted && styles.permissionButtonSuccessText,
-                  ]}
-                >
-                  {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan izin sekarang'}
+          {permissionsGranted ? null : (
+            <View style={styles.permissionCard}>
+              <View style={styles.permissionHeader}>
+                <Text style={styles.permissionTitle}>Izin Aplikasi</Text>
+                <Text style={[styles.permissionStatusText, permissionsGranted && styles.permissionStatusSuccess]}>
+                  {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan semua izin untuk melanjutkan.'}
                 </Text>
+              </View>
+              {permissionsLoading ? (
+                <View style={styles.permissionLoadingRow}>
+                  <ActivityIndicator color={UI_COLORS.secondary} />
+                  <Text style={styles.permissionLoadingText}>Memeriksa izin perangkat...</Text>
+                </View>
+              ) : (
+                <View style={styles.permissionList}>
+                  {(permissionStatuses ?? []).map((status) => (
+                    <View key={status.key} style={styles.permissionRow}>
+                      <Ionicons
+                        name={status.granted ? 'checkmark-circle' : 'alert-circle'}
+                        size={18}
+                        color={status.granted ? '#16A34A' : '#DC2626'}
+                      />
+                      <Text style={styles.permissionLabel}>
+                        {status.label}
+                        {status.platform === 'android' ? ' (Android)' : ''}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.permissionValue,
+                          status.granted ? styles.permissionGranted : styles.permissionDenied,
+                        ]}
+                      >
+                        {status.granted ? 'Diizinkan' : 'Ditolak'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               )}
-            </Pressable>
-          </View>
+              <Pressable
+                style={[
+                  styles.permissionButton,
+                  permissionsGranted && styles.permissionButtonSuccess,
+                  requestingPermissions && styles.buttonDisabled,
+                ]}
+                onPress={handleRequestPermissions}
+                disabled={requestingPermissions}
+              >
+                {requestingPermissions ? (
+                  <ActivityIndicator color={permissionsGranted ? UI_COLORS.secondary : '#fff'} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.permissionButtonText,
+                      permissionsGranted && styles.permissionButtonSuccessText,
+                    ]}
+                  >
+                    {permissionsGranted ? 'Semua izin aktif' : 'Aktifkan izin sekarang'}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
