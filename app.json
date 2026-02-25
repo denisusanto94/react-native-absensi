@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "absensiApp",
-    "slug": "absensiApp",
+    "slug": "absensiapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -64,8 +64,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "0e2cdf4c-4653-4646-b6d1-e480debc2160"
+        "projectId": "d4c40d5d-56ad-4324-9540-5235c01c8b4b"
       }
-    }
+    },
+    "owner": "1311502353"
   }
 }

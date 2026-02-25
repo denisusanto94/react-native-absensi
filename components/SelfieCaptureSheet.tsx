@@ -157,8 +157,10 @@ export const SelfieCaptureSheet = ({
       }
     }
     onCaptured(finalUri);
-    setPreviewUri(null);
-    resetCameraSession();
+    setTimeout(() => {
+      setPreviewUri(null);
+      resetCameraSession();
+    }, 0);
   }, [onCaptured, previewUri, resetCameraSession]);
 
   const handleRetake = useCallback(() => {
