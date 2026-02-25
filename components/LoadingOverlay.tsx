@@ -1,4 +1,4 @@
-import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { UI_COLORS } from '@/constants/attendance';
 
@@ -8,21 +8,15 @@ type Props = {
 };
 
 export const LoadingOverlay = ({ visible, message }: Props) => {
+  if (!visible) return null;
+
   return (
-    <Modal
-      transparent
-      statusBarTranslucent
-      animationType="fade"
-      presentationStyle="overFullScreen"
-      visible={visible}
-    >
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <ActivityIndicator size="large" color={UI_COLORS.primary} style={styles.loadingImage} />
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-        </View>
+    <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
+      <View style={styles.card}>
+        <ActivityIndicator size="large" color={UI_COLORS.primary} style={styles.loadingImage} />
+        {message ? <Text style={styles.message}>{message}</Text> : null}
       </View>
-    </Modal>
+    </View>
   );
 };
 

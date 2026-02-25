@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+  type CameraMountError,
+} from "expo-camera";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -8,13 +15,6 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  CameraView,
-  useCameraPermissions,
-  useMicrophonePermissions,
-  type CameraMountError,
-} from "expo-camera";
-import { Ionicons } from "@expo/vector-icons";
 import { captureRef } from "react-native-view-shot";
 
 import { UI_COLORS } from "@/constants/attendance";
@@ -157,11 +157,7 @@ export const SelfieCaptureSheet = ({
       }
     }
     onCaptured(finalUri);
-    setTimeout(() => {
-      setPreviewUri(null);
-      resetCameraSession();
-    }, 0);
-  }, [onCaptured, previewUri, resetCameraSession]);
+  }, [onCaptured, previewUri]);
 
   const handleRetake = useCallback(() => {
     setPreviewUri(null);
@@ -220,8 +216,7 @@ export const SelfieCaptureSheet = ({
       statusBarTranslucent
       hardwareAccelerated
     >
-      {visible ? (
-        <View style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Pressable hitSlop={16} onPress={onDismiss}>
             <Ionicons name="close" size={24} color={UI_COLORS.secondary} />
@@ -257,19 +252,21 @@ export const SelfieCaptureSheet = ({
           </View>
         ) : (
           <View style={styles.cameraWrapper}>
-            <CameraView
-              key={cameraKey}
-              ref={(ref) => {
-                cameraRef.current = ref;
-              }}
-              style={StyleSheet.absoluteFill}
-              facing="front"
-              enableTorch={false}
-              mode="picture"
-              active={visible && !previewUri}
-              onCameraReady={() => setCameraReady(true)}
-              onMountError={handleCameraError}
-            />
+            {visible && !previewUri && (
+              <CameraView
+                key={cameraKey}
+                ref={(ref) => {
+                  cameraRef.current = ref;
+                }}
+                style={StyleSheet.absoluteFill}
+                facing="front"
+                enableTorch={false}
+                mode="picture"
+                active={visible && !previewUri}
+                onCameraReady={() => setCameraReady(true)}
+                onMountError={handleCameraError}
+              />
+            )}
             <View style={styles.cameraOverlay}>
               {cameraReady ? (
                 <Text style={styles.overlayText}>Posisikan wajahmu di tengah layar</Text>
@@ -318,8 +315,7 @@ export const SelfieCaptureSheet = ({
             </Text>
           )}
         </View>
-        </View>
-      ) : null}
+      </View>
     </Modal>
   );
 };

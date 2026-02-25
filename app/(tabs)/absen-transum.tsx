@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -10,7 +11,6 @@ import {
   ToastAndroid,
   View,
 } from 'react-native';
-import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SummaryCard } from '@/components/attendance/SummaryCard';
@@ -184,11 +184,13 @@ export default function AbsenTransumScreen() {
 
   const handleSelfieCaptured = useCallback(
     async (selfieUri: string) => {
+      setSelfieSheetOpen(false);
       if (!pendingAction) {
-        setSelfieSheetOpen(false);
         return;
       }
-      setSelfieSheetOpen(false);
+
+      // Small pause to let the camera modal close before showing loading
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const action = pendingAction.type;
       const coords = pendingAction.coords;
@@ -210,16 +212,19 @@ export default function AbsenTransumScreen() {
           }
         }, loadingMessage);
 
+        // Small pause before alert
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         if (action === 'check-in') {
           Alert.alert('Check-in transum berhasil', 'Selamat menjalankan hari Rabu tanpa macet!');
         } else {
           Alert.alert('Check-out transum berhasil', 'Terima kasih sudah mengikuti program.');
         }
       } catch (error) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
         Alert.alert('Ups', error instanceof Error ? error.message : String(error));
       } finally {
         setPendingAction(null);
-        setSelfieSheetOpen(false);
       }
     },
     [checkIn, checkOut, pendingAction, withLoading]
@@ -228,15 +233,15 @@ export default function AbsenTransumScreen() {
   const todaysSession = summary.todaysRecords[0];
   const checkInTime = todaysSession
     ? new Date(todaysSession.checkIn).toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     : '-';
   const checkOutTime = todaysSession?.checkOut
     ? new Date(todaysSession.checkOut).toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     : '-';
 
   const completedToday = useMemo(
@@ -401,11 +406,11 @@ export default function AbsenTransumScreen() {
         watermark={
           pendingAction
             ? {
-                latitude: pendingAction.coords.latitude,
-                longitude: pendingAction.coords.longitude,
-                timestamp: pendingAction.capturedAt,
-                label: pendingAction.locationLabel,
-              }
+              latitude: pendingAction.coords.latitude,
+              longitude: pendingAction.coords.longitude,
+              timestamp: pendingAction.capturedAt,
+              label: pendingAction.locationLabel,
+            }
             : null
         }
         onCaptured={handleSelfieCaptured}

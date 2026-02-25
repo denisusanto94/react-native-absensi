@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,11 +12,10 @@ import {
   ToastAndroid,
   View,
 } from 'react-native';
-import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { SummaryCard } from '@/components/attendance/SummaryCard';
 import { LocationGateCard } from '@/components/attendance/LocationGateCard';
+import { SummaryCard } from '@/components/attendance/SummaryCard';
 import { SelfieCaptureSheet } from '@/components/SelfieCaptureSheet';
 import {
   ALLOWED_RADIUS_METERS,
@@ -26,8 +26,8 @@ import {
 import { useAttendance } from '@/hooks/useAttendance';
 import { useAuth } from '@/hooks/useAuth';
 import { useLoadingOverlay } from '@/hooks/useLoadingOverlay';
-import { metersBetween } from '@/utils/geo';
 import { animateLayoutTransition } from '@/utils/animation';
+import { metersBetween } from '@/utils/geo';
 
 type PendingAction = {
   type: 'check-in' | 'check-out';
@@ -202,11 +202,13 @@ export default function AbsenScreen() {
 
   const handleSelfieCaptured = useCallback(
     async (selfieUri: string) => {
+      setSelfieSheetOpen(false);
       if (!pendingAction) {
-        setSelfieSheetOpen(false);
         return;
       }
-      setSelfieSheetOpen(false);
+
+      // Small pause to let the camera modal close before showing loading
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const action = pendingAction.type;
       const coords = pendingAction.coords;
@@ -227,16 +229,19 @@ export default function AbsenScreen() {
           }
         }, loadingMessage);
 
+        // Small pause before alert
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         if (action === 'check-in') {
           Alert.alert('Check-in berhasil', 'Selamat bekerja!');
         } else {
           Alert.alert('Check-out berhasil', 'Sampai jumpa lagi besok!');
         }
       } catch (error) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
         Alert.alert('Ups', error instanceof Error ? error.message : String(error));
       } finally {
         setPendingAction(null);
-        setSelfieSheetOpen(false);
       }
     },
     [checkIn, checkOut, pendingAction, withLoading]
@@ -245,15 +250,15 @@ export default function AbsenScreen() {
   const todaysSession = summary.todaysRecords[0];
   const checkInTime = todaysSession
     ? new Date(todaysSession.checkIn).toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     : '-';
   const checkOutTime = todaysSession?.checkOut
     ? new Date(todaysSession.checkOut).toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     : '-';
 
   const canCheckIn = useMemo(() => !activeRecord, [activeRecord]);
@@ -380,11 +385,11 @@ export default function AbsenScreen() {
         watermark={
           pendingAction
             ? {
-                latitude: pendingAction.coords.latitude,
-                longitude: pendingAction.coords.longitude,
-                timestamp: pendingAction.capturedAt,
-                label: pendingAction.locationLabel,
-              }
+              latitude: pendingAction.coords.latitude,
+              longitude: pendingAction.coords.longitude,
+              timestamp: pendingAction.capturedAt,
+              label: pendingAction.locationLabel,
+            }
             : null
         }
         onCaptured={handleSelfieCaptured}
@@ -541,3 +546,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+

@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import {
   Pressable,
@@ -7,8 +9,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 
 import { SummaryCard } from '@/components/attendance/SummaryCard';
 import { UI_COLORS } from '@/constants/attendance';
@@ -45,6 +45,12 @@ export default function HomeScreen() {
               title="Mulai Absen"
               description="Selfie & GPS"
               onPress={() => router.push('/(tabs)/absen')}
+            />
+            <QuickAction
+              icon="bus"
+              title="Absen Transum"
+              description="Transportasi"
+              onPress={() => router.push('/(tabs)/absen-transum')}
             />
             <QuickAction
               icon="document-text"
