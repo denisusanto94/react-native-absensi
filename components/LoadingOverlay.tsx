@@ -1,4 +1,4 @@
-import { Image, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 
 import { UI_COLORS } from '@/constants/attendance';
 
@@ -6,8 +6,6 @@ type Props = {
   visible: boolean;
   message?: string;
 };
-
-const loadingIllustration = require('@/assets/images/loading-paperline.gif');
 
 export const LoadingOverlay = ({ visible, message }: Props) => {
   return (
@@ -20,7 +18,7 @@ export const LoadingOverlay = ({ visible, message }: Props) => {
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Image source={loadingIllustration} resizeMode="contain" style={styles.loadingImage} />
+          <ActivityIndicator size="large" color={UI_COLORS.primary} style={styles.loadingImage} />
           {message ? <Text style={styles.message}>{message}</Text> : null}
         </View>
       </View>
@@ -46,8 +44,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingImage: {
-    width: 120,
-    height: 120,
+    marginVertical: 8,
   },
   message: {
     textAlign: 'center',

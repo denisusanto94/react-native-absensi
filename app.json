@@ -8,29 +8,29 @@
     "scheme": "absensiapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/logo-splash-screen.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F62FE"
+      "backgroundColor": "#ffffff"
     },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "splash": {
-        "image": "./assets/images/logo-splash-screen.png",
+        "image": "./assets/images/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0F62FE"
+        "backgroundColor": "#ffffff"
       }
     },
     "android": {
       "splash": {
-        "image": "./assets/images/logo-splash-screen.png",
+        "image": "./assets/images/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0F62FE"
+        "backgroundColor": "#ffffff"
       },
       "adaptiveIcon": {
-        "backgroundColor": "#0F62FE",
+        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/logo-splash-screen.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
@@ -57,13 +57,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo-splash-screen.png",
-          "imageWidth": 220,
+          "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0F62FE",
-          "dark": {
-            "backgroundColor": "#001D6C"
-          }
+          "backgroundColor": "#ffffff"
         }
       ],
       [
