@@ -15,6 +15,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    1. npx expo start
    2. npx expo run:android --variant debug (jalan dengan emulator)
+   3. expo start --android (run emulator)
    ```
 
 In the output, you'll find options to open the app in a

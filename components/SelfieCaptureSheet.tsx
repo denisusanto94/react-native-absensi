@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -16,8 +15,6 @@ import {
   type CameraMountError,
 } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
-import * as MediaLibrary from "expo-media-library";
-import Constants from "expo-constants";
 import { captureRef } from "react-native-view-shot";
 
 import { UI_COLORS } from "@/constants/attendance";
@@ -44,9 +41,6 @@ export const SelfieCaptureSheet = ({
 }: Props) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
-  const isExpoGo = Constants.appOwnership === "expo";
-  const [mediaPermission, setMediaPermission] =
-    useState<MediaLibrary.PermissionResponse | null>(null);
   const cameraRef = useRef<CameraView | null>(null);
   const previewRef = useRef<View | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
@@ -105,15 +99,6 @@ export const SelfieCaptureSheet = ({
   ]);
 
   useEffect(() => {
-    if (!visible || isExpoGo) {
-      return;
-    }
-    MediaLibrary.getPermissionsAsync()
-      .then((status) => setMediaPermission(status))
-      .catch((error) => console.warn("Gagal memeriksa izin media", error));
-  }, [isExpoGo, visible]);
-
-  useEffect(() => {
     if (!visible || !permission?.granted || cameraReady || cameraError) {
       return;
     }
@@ -170,29 +155,10 @@ export const SelfieCaptureSheet = ({
         console.warn("Gagal membuat watermark pada selfie", error);
       }
     }
-    if (!isExpoGo) {
-      try {
-        let status = mediaPermission;
-        if (!status || status.status !== "granted") {
-          status = await MediaLibrary.requestPermissionsAsync();
-          setMediaPermission(status);
-        }
-        if (status?.status === "granted") {
-          await MediaLibrary.saveToLibraryAsync(finalUri);
-        } else {
-          Alert.alert(
-            "Izin penyimpanan",
-            "Tidak dapat menyimpan foto tanpa izin akses media. Foto tetap digunakan untuk absensi."
-          );
-        }
-      } catch (error) {
-        console.warn("Gagal menyimpan selfie", error);
-      }
-    }
     onCaptured(finalUri);
     setPreviewUri(null);
     resetCameraSession();
-  }, [mediaPermission, isExpoGo, onCaptured, previewUri, resetCameraSession]);
+  }, [onCaptured, previewUri, resetCameraSession]);
 
   const handleRetake = useCallback(() => {
     setPreviewUri(null);
@@ -345,7 +311,7 @@ export const SelfieCaptureSheet = ({
             <Text style={styles.helperText}>Selfie opsional jika izin kamera ditolak.</Text>
           ) : (
             <Text style={styles.helperText}>
-              Foto disimpan hanya di perangkat ini sebagai bukti selfie.
+              Foto hanya digunakan untuk absensi, tidak disimpan ke galeri.
             </Text>
           )}
         </View>

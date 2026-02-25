@@ -1,8 +1,6 @@
-import { LayoutAnimation, Platform, UIManager } from 'react-native';
+import { LayoutAnimation } from 'react-native';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// setLayoutAnimationEnabledExperimental is a no-op in New Architecture; avoid calling to prevent warning.
 
 export const animateLayoutTransition = () => {
   try {
