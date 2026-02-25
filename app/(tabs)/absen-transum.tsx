@@ -188,6 +188,7 @@ export default function AbsenTransumScreen() {
         setSelfieSheetOpen(false);
         return;
       }
+      setSelfieSheetOpen(false);
 
       const action = pendingAction.type;
       const coords = pendingAction.coords;
@@ -238,7 +239,14 @@ export default function AbsenTransumScreen() {
       })
     : '-';
 
-  const canCheckIn = useMemo(() => !activeRecord, [activeRecord]);
+  const completedToday = useMemo(
+    () => Boolean(todaysSession?.checkOut),
+    [todaysSession?.checkOut]
+  );
+  const canCheckIn = useMemo(
+    () => !activeRecord && !completedToday,
+    [activeRecord, completedToday]
+  );
   const canCheckOut = useMemo(() => Boolean(activeRecord), [activeRecord]);
 
   const handleSelectDomicile = useCallback(
@@ -355,9 +363,17 @@ export default function AbsenTransumScreen() {
             </View>
           </View>
           <Text style={styles.sessionStatus}>
-            Status: {activeRecord ? 'Sedang menjalankan transum' : 'Belum check-in'}
+            Status: {activeRecord ? 'Sedang menjalankan transum' : completedToday ? 'Selesai hari ini' : 'Belum check-in'}
           </Text>
         </View>
+
+        {completedToday ? (
+          <View style={styles.completedCard}>
+            <Text style={styles.completedMessage}>
+              Terima kasih, hari ini sudah menggunakan transportasi umum.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.actionsRow}>
           <Pressable
@@ -503,6 +519,19 @@ const styles = StyleSheet.create({
   sessionStatus: {
     color: '#55617B',
     fontSize: 14,
+  },
+  completedCard: {
+    backgroundColor: 'rgba(15, 98, 254, 0.08)',
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 98, 254, 0.2)',
+  },
+  completedMessage: {
+    color: UI_COLORS.secondary,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   actionsRow: {
     flexDirection: 'row',

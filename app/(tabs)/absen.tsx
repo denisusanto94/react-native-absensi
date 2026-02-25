@@ -206,6 +206,7 @@ export default function AbsenScreen() {
         setSelfieSheetOpen(false);
         return;
       }
+      setSelfieSheetOpen(false);
 
       const action = pendingAction.type;
       const coords = pendingAction.coords;

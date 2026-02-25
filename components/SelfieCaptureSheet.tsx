@@ -143,6 +143,7 @@ export const SelfieCaptureSheet = ({
     let finalUri = previewUri;
     if (previewRef.current) {
       try {
+        await new Promise((r) => setTimeout(r, 100));
         const captured = await captureRef(previewRef, {
           format: "jpg",
           quality: 0.9,
@@ -284,11 +285,11 @@ export const SelfieCaptureSheet = ({
         <View style={styles.footer}>
           {!permission?.granted ? null : previewUri ? (
             <View style={styles.actionsRow}>
-              <Pressable style={styles.secondaryButton} onPress={handleRetake}>
+              <Pressable style={[styles.secondaryButton, styles.button70]} onPress={handleRetake}>
                 <Text style={styles.secondaryButtonText}>Ulangi Foto</Text>
               </Pressable>
-              <Pressable style={styles.primaryButton} onPress={handleUseSelfie}>
-                <Text style={styles.primaryButtonText}>Gunakan Selfie</Text>
+              <Pressable style={[styles.primaryButton, styles.button30]} onPress={handleUseSelfie}>
+                <Text style={styles.primaryButtonText}>Kirim</Text>
               </Pressable>
             </View>
           ) : (
@@ -429,12 +430,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   secondaryButton: {
-    flex: 1,
     borderWidth: 1,
     borderColor: UI_COLORS.secondary,
     paddingVertical: 14,
     borderRadius: 18,
     alignItems: "center",
+  },
+  button70: {
+    flex: 0.7,
+  },
+  button30: {
+    flex: 0.3,
   },
   secondaryButtonText: {
     color: UI_COLORS.secondary,
